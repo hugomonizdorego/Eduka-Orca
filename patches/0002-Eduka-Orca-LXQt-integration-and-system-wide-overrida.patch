@@ -1,0 +1,518 @@
+From a4103c35ba895fe5b8fb0d10dcbf485d2419a3ba Mon Sep 17 00:00:00 2001
+From: Edukasaun OS <hugomonizdorego@angelinojoana.com>
+Date: Wed, 30 Sep 2026 19:20:53 +0900
+Subject: [PATCH 2/3] Eduka-Orca: LXQt integration and system-wide overridable
+ defaults
+
+- eduka-orca launcher, eduka-orca-toggle (menu entry, notification
+  feedback), eduka-orca-autostart for lxqt-session (which ignores
+  AutostartCondition)
+- QT_ACCESSIBILITY=1 via profile.d and environment.d so LXQt/Qt apps
+  are readable; toolkit-accessibility on via gschema override
+- Super+Alt+S snippet for lxqt-globalkeyshortcuts
+- rate/pitch/volume and caption settings honour *.gschema.override
+  vendor defaults, so schools can tune them without patching code
+- README.Eduka.md (Indonesian + English)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KtDnhykBZ6mr4wBxEvfHXz
+---
+ eduka/90_eduka-orca.gschema.override          |  7 ++
+ eduka/README.Eduka.md                         | 98 +++++++++++++++++++
+ eduka/bin/eduka-orca                          | 17 ++++
+ eduka/bin/eduka-orca-autostart                | 15 +++
+ eduka/bin/eduka-orca-toggle                   | 55 +++++++++++
+ eduka/env/90-eduka-orca-a11y.conf             |  2 +
+ eduka/env/eduka-orca-a11y.sh                  |  4 +
+ eduka/lxqt/globalkeyshortcuts-eduka-orca.conf | 12 +++
+ eduka/meson.build                             | 44 +++++++++
+ eduka/xdg/eduka-orca-autostart.desktop        | 10 ++
+ eduka/xdg/eduka-orca.desktop                  | 28 ++++++
+ meson.build                                   |  1 +
+ src/orca/eduka_defaults.py                    | 15 +++
+ src/orca/gsettings_registry.py                | 26 ++++-
+ tests/unit_tests/test_eduka_defaults.py       | 18 ++++
+ 15 files changed, 351 insertions(+), 1 deletion(-)
+ create mode 100644 eduka/90_eduka-orca.gschema.override
+ create mode 100644 eduka/README.Eduka.md
+ create mode 100755 eduka/bin/eduka-orca
+ create mode 100755 eduka/bin/eduka-orca-autostart
+ create mode 100755 eduka/bin/eduka-orca-toggle
+ create mode 100644 eduka/env/90-eduka-orca-a11y.conf
+ create mode 100644 eduka/env/eduka-orca-a11y.sh
+ create mode 100644 eduka/lxqt/globalkeyshortcuts-eduka-orca.conf
+ create mode 100644 eduka/meson.build
+ create mode 100644 eduka/xdg/eduka-orca-autostart.desktop
+ create mode 100644 eduka/xdg/eduka-orca.desktop
+
+diff --git a/eduka/90_eduka-orca.gschema.override b/eduka/90_eduka-orca.gschema.override
+new file mode 100644
+index 0000000..a0562f0
+--- /dev/null
++++ b/eduka/90_eduka-orca.gschema.override
+@@ -0,0 +1,7 @@
++# Eduka-Orca defaults for Edukasaun OS.
++# Installed as /usr/share/glib-2.0/schemas/90_eduka-orca.gschema.override
++#
++# Tell toolkits that assistive technology may be used, so GTK and Qt
++# applications load their AT-SPI bridge from the start of the session.
++[org.gnome.desktop.interface]
++toolkit-accessibility=true
+diff --git a/eduka/README.Eduka.md b/eduka/README.Eduka.md
+new file mode 100644
+index 0000000..768d363
+--- /dev/null
++++ b/eduka/README.Eduka.md
+@@ -0,0 +1,98 @@
++# Eduka-Orca
++
++Eduka-Orca adalah pembaca layar **Orca 50.3** yang disesuaikan untuk
++**Edukasaun OS** dan desktop **Eduka-Desktop (LXQt)**, dengan fokus pada
++pengguna dengan **gangguan pendengaran (tunarungu ringan–sedang)** dan
++tunanetra.
++
++*Eduka-Orca is the Orca 50.3 screen reader tuned for Edukasaun OS and the
++Eduka-Desktop (LXQt), with a focus on users who are hard of hearing. An English
++summary is at the end.*
++
++## Apa yang berbeda dari Orca biasa
++
++| | Orca (upstream) | Eduka-Orca |
++|---|---|---|
++| Kecepatan bicara | 50 (dari 0–100) | **30** — lebih pelan, tidak terburu-buru |
++| Nada suara | 5.0 | **4.5** — sedikit lebih rendah, lebih mudah didengar |
++| Volume | 10 (maksimum) | 10 (maksimum) |
++| Teks ucapan di layar (*speech monitor*) | mati | **nyala**, huruf 24 pt, kuning di atas hitam, menempel di bawah layar seperti subtitle, tidak merebut fokus keyboard, kalimat terbaru ditebalkan |
++| Bahasa Tetum | jatuh ke suara Inggris | **memakai suara Portugis (Eropa)** karena eSpeak NG belum punya suara Tetum |
++| Desktop LXQt | tidak ada autostart | autostart LXQt, variabel aksesibilitas Qt, menu *Eduka-Orca*, skrip nyala/mati |
++
++Semua nilai di atas hanya **bawaan**: pengguna tetap bisa mengubahnya di
++*Pengaturan Orca* (Orca+Spasi), dan tombol Orca+Shift+D tetap menyalakan/mematikan
++teks ucapan.
++
++## Cara memakai di Eduka-Desktop
++
++* **Menu → Aksesibilitas → Eduka-Orca**: menyalakan atau mematikan pembaca layar.
++  Muncul notifikasi di layar "Eduka-Orca aktif / nonaktif".
++* Dari terminal: `eduka-orca-toggle`, atau `eduka-orca --replace`.
++* Pengaturan: klik kanan menu *Eduka-Orca → Pengaturan*, atau `eduka-orca --replace --setup`.
++* Pilihan nyala/mati diingat: jika aktif, Eduka-Orca otomatis berjalan saat login
++  (`/etc/xdg/autostart/eduka-orca-autostart.desktop`, khusus LXQt).
++* Pintasan keyboard **Super+Alt+S**: gabungkan
++  `/usr/share/eduka-orca/globalkeyshortcuts-eduka-orca.conf` ke
++  `/etc/xdg/lxqt/globalkeyshortcuts.conf` bawaan Eduka-Desktop.
++
++### Menyalakan secara bawaan untuk semua pengguna (untuk pembuat ISO)
++
++Buat berkas `/usr/share/glib-2.0/schemas/95_edukasaun-a11y.gschema.override`:
++
++```
++[org.gnome.desktop.a11y.applications]
++screen-reader-enabled=true
++```
++
++lalu jalankan `glib-compile-schemas /usr/share/glib-2.0/schemas`.
++
++### Mengubah kecepatan bawaan untuk seluruh sistem
++
++Buat berkas override, misalnya `96_edukasaun-orca.gschema.override`:
++
++```
++[org.gnome.Orca.Voice]
++rate=25
++pitch=4.5
++
++[org.gnome.Orca.Speech]
++monitor-font-size=28
++```
++
++## Berkas yang dipasang paket ini
++
++* `/usr/bin/orca` — Orca 50.3 dengan patch Eduka
++* `/usr/bin/eduka-orca`, `eduka-orca-toggle`, `eduka-orca-autostart`
++* `/usr/share/applications/eduka-orca.desktop` — entri menu
++* `/etc/xdg/autostart/eduka-orca-autostart.desktop` — autostart LXQt
++* `/etc/profile.d/eduka-orca-a11y.sh`, `/usr/lib/environment.d/90-eduka-orca-a11y.conf`
++  — `QT_ACCESSIBILITY=1` agar aplikasi Qt/LXQt terbaca oleh Orca
++* `/usr/share/glib-2.0/schemas/90_eduka-orca.gschema.override`
++
++## Catatan penting tentang gangguan pendengaran
++
++Orca adalah pembaca layar berbasis **suara**. Untuk pengguna yang **tuli total**,
++suara tidak membantu; yang membantu adalah **teks ucapan di layar** yang sekarang
++aktif secara bawaan, ditambah pembesar layar dan tema kontras tinggi. Untuk
++pengguna yang **sulit mendengar**, bicara pelan, nada lebih rendah, dan volume
++maksimum membuat ucapan lebih mudah diikuti. Uji coba bersama pengguna
++tunarungu di sekolah sangat disarankan untuk menyetel angka kecepatan yang paling cocok.
++
++## Kode sumber
++
++Berbasis tag `50.3` dari https://github.com/GNOME/orca (LGPL-2.1-or-later).
++Semua perubahan Eduka ditandai dengan komentar `Eduka-Orca`, nilai bawaan ada di
++`src/orca/eduka_defaults.py`, dan diuji di `tests/unit_tests/test_eduka_defaults.py`.
++
++---
++
++## English summary
++
++Eduka-Orca = Orca 50.3 + these changes: speech rate 30 (upstream 50), pitch 4.5
++(upstream 5.0), speech monitor captions on by default (24 pt yellow on black,
++docked at the bottom, never steals focus, newest line bold, persisted in
++GSettings key `org.gnome.Orca.Speech monitor-enabled`), Tetum locale uses a
++European Portuguese voice, plus LXQt autostart, Qt accessibility environment,
++an "Eduka-Orca" menu entry and an on/off toggle script. Built for Debian 13
++(trixie), which Edukasaun OS follows.
+diff --git a/eduka/bin/eduka-orca b/eduka/bin/eduka-orca
+new file mode 100755
+index 0000000..ef68b62
+--- /dev/null
++++ b/eduka/bin/eduka-orca
+@@ -0,0 +1,17 @@
++#!/bin/sh
++# Eduka-Orca launcher for Eduka-Desktop (LXQt) on Edukasaun OS.
++#
++# Starts Orca with the Eduka defaults (slow speech, on-screen captions). All
++# arguments are passed through to orca, e.g. "eduka-orca --replace --setup".
++
++# Qt applications (the whole LXQt desktop) expose their accessibility tree to
++# AT-SPI only when this is set. It is also exported session-wide by
++# /etc/profile.d/eduka-orca-a11y.sh; setting it here covers apps Orca spawns.
++export QT_ACCESSIBILITY=1
++
++# Tell GTK and Qt applications started from now on that assistive technology is on.
++if command -v gsettings >/dev/null 2>&1; then
++    gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
++fi
++
++exec /usr/bin/orca "$@"
+diff --git a/eduka/bin/eduka-orca-autostart b/eduka/bin/eduka-orca-autostart
+new file mode 100755
+index 0000000..ae76075
+--- /dev/null
++++ b/eduka/bin/eduka-orca-autostart
+@@ -0,0 +1,15 @@
++#!/bin/sh
++# Session autostart helper for Eduka-Desktop (LXQt).
++#
++# lxqt-session does not evaluate the GNOME-only "AutostartCondition" key, so
++# this helper checks the screen-reader setting itself and only starts
++# Eduka-Orca when the user (or the Edukasaun OS installer) turned it on.
++
++enabled=$(gsettings get org.gnome.desktop.a11y.applications screen-reader-enabled 2>/dev/null)
++[ "$enabled" = "true" ] || exit 0
++
++# Give the panel and the AT-SPI bus a moment to come up, so the first thing
++# Orca reads is the desktop and not an empty session.
++sleep "${EDUKA_ORCA_START_DELAY:-2}"
++
++exec /usr/bin/eduka-orca --replace
+diff --git a/eduka/bin/eduka-orca-toggle b/eduka/bin/eduka-orca-toggle
+new file mode 100755
+index 0000000..8dbfe62
+--- /dev/null
++++ b/eduka/bin/eduka-orca-toggle
+@@ -0,0 +1,55 @@
++#!/bin/sh
++# Turn Eduka-Orca on or off for the current user (Eduka-Desktop / LXQt).
++#
++# Used by the "Eduka-Orca" menu entry and the Super+Alt+S keyboard shortcut.
++# The choice is remembered in GSettings, so Eduka-Orca starts again (or not)
++# at the next login.
++
++SCHEMA=org.gnome.desktop.a11y.applications
++KEY=screen-reader-enabled
++UID_NOW=$(id -u)
++
++say() {
++    # Visual feedback for users who are hard of hearing.
++    if command -v notify-send >/dev/null 2>&1; then
++        notify-send --app-name=Eduka-Orca --icon=orca "Eduka-Orca" "$1" 2>/dev/null || true
++    fi
++}
++
++msg_on() {
++    case "${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-$LANG}}}" in
++        tet*) echo "Eduka-Orca ativu" ;;
++        pt*) echo "Eduka-Orca ativado" ;;
++        id*) echo "Eduka-Orca aktif" ;;
++        *) echo "Eduka-Orca is on" ;;
++    esac
++}
++
++msg_off() {
++    case "${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-$LANG}}}" in
++        tet*) echo "Eduka-Orca la ativu" ;;
++        pt*) echo "Eduka-Orca desativado" ;;
++        id*) echo "Eduka-Orca nonaktif" ;;
++        *) echo "Eduka-Orca is off" ;;
++    esac
++}
++
++set_key() {
++    if command -v gsettings >/dev/null 2>&1; then
++        gsettings set "$SCHEMA" "$KEY" "$1" 2>/dev/null || true
++    fi
++}
++
++if pgrep -u "$UID_NOW" -x orca >/dev/null 2>&1; then
++    set_key false
++    pkill -TERM -u "$UID_NOW" -x orca
++    say "$(msg_off)"
++else
++    set_key true
++    if command -v setsid >/dev/null 2>&1; then
++        setsid /usr/bin/eduka-orca --replace >/dev/null 2>&1 &
++    else
++        nohup /usr/bin/eduka-orca --replace >/dev/null 2>&1 &
++    fi
++    say "$(msg_on)"
++fi
+diff --git a/eduka/env/90-eduka-orca-a11y.conf b/eduka/env/90-eduka-orca-a11y.conf
+new file mode 100644
+index 0000000..ed4e916
+--- /dev/null
++++ b/eduka/env/90-eduka-orca-a11y.conf
+@@ -0,0 +1,2 @@
++# Eduka-Orca: let Qt applications (the LXQt desktop) talk to screen readers.
++QT_ACCESSIBILITY=1
+diff --git a/eduka/env/eduka-orca-a11y.sh b/eduka/env/eduka-orca-a11y.sh
+new file mode 100644
+index 0000000..1aea8ce
+--- /dev/null
++++ b/eduka/env/eduka-orca-a11y.sh
+@@ -0,0 +1,4 @@
++# Eduka-Orca: let Qt applications (the LXQt desktop) talk to screen readers.
++# Sourced by login shells and by display managers that read /etc/profile.
++QT_ACCESSIBILITY=1
++export QT_ACCESSIBILITY
+diff --git a/eduka/lxqt/globalkeyshortcuts-eduka-orca.conf b/eduka/lxqt/globalkeyshortcuts-eduka-orca.conf
+new file mode 100644
+index 0000000..01cd9eb
+--- /dev/null
++++ b/eduka/lxqt/globalkeyshortcuts-eduka-orca.conf
+@@ -0,0 +1,12 @@
++# Eduka-Orca keyboard shortcut for lxqt-globalkeyshortcuts.
++#
++# Super+Alt+S turns Eduka-Orca on and off (the same shortcut GNOME uses for
++# its screen reader). Merge this section into the Eduka-Desktop default
++# /etc/xdg/lxqt/globalkeyshortcuts.conf, or into a user's
++# ~/.config/lxqt/globalkeyshortcuts.conf while lxqt-globalkeyshortcuts is
++# not running. The number after the dot must be unique in the file.
++
++[Meta%2BAlt%2BS.90]
++Comment=Eduka-Orca: turn the screen reader on/off
++Enabled=true
++Exec=eduka-orca-toggle
+diff --git a/eduka/meson.build b/eduka/meson.build
+new file mode 100644
+index 0000000..02f264c
+--- /dev/null
++++ b/eduka/meson.build
+@@ -0,0 +1,44 @@
++# Eduka-Orca: integration with Eduka-Desktop (LXQt) on Edukasaun OS.
++
++install_data(
++  'bin/eduka-orca',
++  'bin/eduka-orca-toggle',
++  'bin/eduka-orca-autostart',
++  install_dir: get_option('bindir'),
++  install_mode: 'rwxr-xr-x',
++)
++
++install_data(
++  'xdg/eduka-orca.desktop',
++  install_dir: get_option('datadir') / 'applications',
++)
++
++install_data(
++  'xdg/eduka-orca-autostart.desktop',
++  install_dir: get_option('sysconfdir') / 'xdg' / 'autostart',
++)
++
++install_data(
++  'env/90-eduka-orca-a11y.conf',
++  install_dir: get_option('prefix') / 'lib' / 'environment.d',
++)
++
++install_data(
++  'env/eduka-orca-a11y.sh',
++  install_dir: get_option('sysconfdir') / 'profile.d',
++)
++
++install_data(
++  '90_eduka-orca.gschema.override',
++  install_dir: get_option('datadir') / 'glib-2.0' / 'schemas',
++)
++
++install_data(
++  'lxqt/globalkeyshortcuts-eduka-orca.conf',
++  install_dir: get_option('datadir') / 'eduka-orca',
++)
++
++install_data(
++  'README.Eduka.md',
++  install_dir: get_option('datadir') / 'doc' / 'eduka-orca',
++)
+diff --git a/eduka/xdg/eduka-orca-autostart.desktop b/eduka/xdg/eduka-orca-autostart.desktop
+new file mode 100644
+index 0000000..30e4d73
+--- /dev/null
++++ b/eduka/xdg/eduka-orca-autostart.desktop
+@@ -0,0 +1,10 @@
++[Desktop Entry]
++Type=Application
++Name=Eduka-Orca
++Comment=Starts the Eduka-Orca screen reader when it is turned on
++Exec=eduka-orca-autostart
++Icon=orca
++NoDisplay=true
++OnlyShowIn=LXQt;
++X-LXQt-Need-Tray=false
++X-systemd-skip=true
+diff --git a/eduka/xdg/eduka-orca.desktop b/eduka/xdg/eduka-orca.desktop
+new file mode 100644
+index 0000000..069a686
+--- /dev/null
++++ b/eduka/xdg/eduka-orca.desktop
+@@ -0,0 +1,28 @@
++[Desktop Entry]
++Type=Application
++Name=Eduka-Orca
++GenericName=Screen Reader
++GenericName[id]=Pembaca Layar
++GenericName[pt]=Leitor de Ecrã
++GenericName[pt_BR]=Leitor de Tela
++GenericName[tet]=Leitór Ekrã
++Comment=Screen reader with slow speech and on-screen captions (turn on/off)
++Comment[id]=Pembaca layar dengan ucapan pelan dan teks di layar (nyalakan/matikan)
++Comment[pt]=Leitor de ecrã com fala lenta e legendas no ecrã (ligar/desligar)
++Comment[pt_BR]=Leitor de tela com fala lenta e legendas na tela (ligar/desligar)
++Comment[tet]=Leitór ekrã ho lian neineik no legenda iha ekrã (liga/mate)
++Exec=eduka-orca-toggle
++Icon=orca
++Terminal=false
++Categories=Utility;Accessibility;
++Keywords=screen reader;accessibility;speech;captions;blind;hearing;orca;eduka;
++Keywords[id]=pembaca layar;aksesibilitas;suara;teks;tunanetra;tunarungu;orca;eduka;
++Keywords[pt]=leitor de ecrã;acessibilidade;fala;legendas;orca;eduka;
++Actions=Preferences;
++
++[Desktop Action Preferences]
++Name=Preferences
++Name[id]=Pengaturan
++Name[pt]=Preferências
++Name[tet]=Preferénsia
++Exec=eduka-orca --replace --setup
+diff --git a/meson.build b/meson.build
+index b741da2..1722892 100644
+--- a/meson.build
++++ b/meson.build
+@@ -121,6 +121,7 @@ gnome.post_install(
+ summary += {'Install dir': python.find_installation('python3').get_install_dir()}
+ 
+ subdir('data')
++subdir('eduka')
+ subdir('docs')
+ subdir('help')
+ subdir('icons')
+diff --git a/src/orca/eduka_defaults.py b/src/orca/eduka_defaults.py
+index 55bc3b8..ba6e4cf 100644
+--- a/src/orca/eduka_defaults.py
++++ b/src/orca/eduka_defaults.py
+@@ -54,6 +54,21 @@ MONITOR_BACKGROUND: str = "#000000"
+ # bottom of the screen like television subtitles.
+ MONITOR_HEIGHT_FRACTION: float = 0.28
+ 
++# Settings for which Orca honours the GSettings schema default, so that distributions
++# and school administrators can tune them system-wide with a *.gschema.override file
++# instead of patching code. (Upstream Orca only reads values the user set in dconf.)
++VENDOR_OVERRIDABLE_KEYS: frozenset[tuple[str, str]] = frozenset(
++    {
++        ("voice", "rate"),
++        ("voice", "pitch"),
++        ("voice", "volume"),
++        ("speech", "monitor-enabled"),
++        ("speech", "monitor-font-size"),
++        ("speech", "monitor-foreground"),
++        ("speech", "monitor-background"),
++    }
++)
++
+ # Languages without a speech-dispatcher / eSpeak NG voice, mapped to the closest voice.
+ # Tetum (Timor-Leste) uses Portuguese-based spelling, so a European Portuguese voice
+ # pronounces it far better than the English fallback speech-dispatcher would otherwise use.
+diff --git a/src/orca/gsettings_registry.py b/src/orca/gsettings_registry.py
+index fe1cc11..c264049 100644
+--- a/src/orca/gsettings_registry.py
++++ b/src/orca/gsettings_registry.py
+@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Any, overload
+ 
+ from gi.repository import Gio
+ 
+-from . import debug, gsettings_migrator
++from . import debug, eduka_defaults, gsettings_migrator
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Callable
+@@ -182,8 +182,32 @@ class GSettingsRegistry:
+         result = accessor(key, sub_path, effective_app) if accessor is not None else None
+         if result is not None:
+             return result
++        vendor = self._vendor_default(handle, schema, key)
++        if vendor is not None:
++            return vendor
+         return self._use_default(schema, key, default)
+ 
++    @staticmethod
++    def _vendor_default(handle: GSettingsSchemaHandle, schema: str, key: str) -> Any | None:
++        """Eduka-Orca: returns the schema default (incl. *.gschema.override), or None.
++
++        Only used for the keys in eduka_defaults.VENDOR_OVERRIDABLE_KEYS, so that
++        administrators can change e.g. the default speech rate system-wide.
++        """
++
++        if (schema, key) not in eduka_defaults.VENDOR_OVERRIDABLE_KEYS:
++            return None
++        gschema = handle.get_schema()
++        if gschema is None or not gschema.has_key(key):
++            return None
++        try:
++            value = gschema.get_key(key).get_default_value().unpack()
++        except (AttributeError, TypeError, ValueError):
++            return None
++        msg = f"GSETTINGS REGISTRY: {schema}/{key} using schema/vendor default = {value!r}"
++        debug.print_message(debug.LEVEL_INFO, msg, True)
++        return value
++
+     @staticmethod
+     def _use_default(schema: str, key: str, default: Any) -> Any | None:
+         """Returns default value, or None if no default was provided."""
+diff --git a/tests/unit_tests/test_eduka_defaults.py b/tests/unit_tests/test_eduka_defaults.py
+index 0bff088..9b046f2 100644
+--- a/tests/unit_tests/test_eduka_defaults.py
++++ b/tests/unit_tests/test_eduka_defaults.py
+@@ -138,3 +138,21 @@ def test_tetum_uses_portuguese_voice(language: str, dialect: str, expected: tupl
+     """Tetum has no eSpeak NG voice, so it must fall back to European Portuguese."""
+ 
+     assert EDUKA.map_speech_language(language, dialect) == expected
++
++
++@pytest.mark.unit
++def test_vendor_overridable_keys_exist(tmp_path: Path):
++    """Every key admins may override system-wide must exist in the generated schema."""
++
++    output = tmp_path / "org.gnome.Orca.gschema.xml"
++    generator = TOOLS / "generate_gsettings_schemas.py"
++    subprocess.run([sys.executable, str(generator), str(SRC.parent), str(output)], check=True)
++    root = ET.parse(output).getroot()
++    schema_ids = {"voice": "org.gnome.Orca.Voice", "speech": "org.gnome.Orca.Speech"}
++    keys = {
++        (schema.get("id"), key.get("name"))
++        for schema in root.iter("schema")
++        for key in schema.iter("key")
++    }
++    for schema, key in EDUKA.VENDOR_OVERRIDABLE_KEYS:
++        assert (schema_ids[schema], key) in keys, (schema, key)
+-- 
+2.43.0
+

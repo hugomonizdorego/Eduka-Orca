@@ -1,0 +1,719 @@
+From 48869c5285f47f5d791cbbbd22b63b4b475a359a Mon Sep 17 00:00:00 2001
+From: Edukasaun OS <hugomonizdorego@angelinojoana.com>
+Date: Wed, 30 Sep 2026 19:18:04 +0900
+Subject: [PATCH 1/3] Eduka-Orca: slower, lower speech and on-screen captions
+ by default
+
+For Edukasaun OS users who are hard of hearing:
+- default speech rate 30 (upstream 50) and pitch 4.5 (upstream 5.0)
+- speech monitor (captions) enabled by default, persisted in GSettings,
+  24pt yellow-on-black, docked at the bottom, never steals focus,
+  newest caption in bold; checkbox in Preferences > On-screen display
+- Tetum locale uses a European Portuguese voice (no eSpeak NG Tetum)
+- defaults centralised in orca/eduka_defaults.py with unit tests
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KtDnhykBZ6mr4wBxEvfHXz
+---
+ po/id.po                                |   4 +
+ po/pt.po                                |   4 +
+ po/pt_BR.po                             |   4 +
+ src/orca/acss.py                        |   4 +-
+ src/orca/eduka_defaults.py              |  68 ++++++++++++
+ src/orca/gsettings_migrator.py          |   4 +-
+ src/orca/guilabels.py                   |   5 +
+ src/orca/meson.build                    |   1 +
+ src/orca/speech_manager.py              |  25 +++--
+ src/orca/speech_monitor.py              |  45 +++++++-
+ src/orca/speech_presenter.py            |  44 ++++++--
+ src/orca/speechdispatcherfactory.py     |  18 ++-
+ tests/unit_tests/test_eduka_defaults.py | 140 ++++++++++++++++++++++++
+ 13 files changed, 336 insertions(+), 30 deletions(-)
+ create mode 100644 src/orca/eduka_defaults.py
+ create mode 100644 tests/unit_tests/test_eduka_defaults.py
+
+diff --git a/po/id.po b/po/id.po
+index a88949f..7cdb1b7 100644
+--- a/po/id.po
++++ b/po/id.po
+@@ -13505,3 +13505,7 @@ msgstr "padat"
+ msgctxt "textattr"
+ msgid "spelling"
+ msgstr "pengejaan"
++
++#. Eduka-Orca
++msgid "Show captions of speech on screen"
++msgstr "Tampilkan teks ucapan di layar"
+diff --git a/po/pt.po b/po/pt.po
+index 43b4006..53e6fda 100644
+--- a/po/pt.po
++++ b/po/pt.po
+@@ -15035,3 +15035,7 @@ msgstr "soletrar"
+ 
+ #~ msgid "Setup complete.  Press Return to continue."
+ #~ msgstr "Configuração terminada.  Prima Enter para continuar."
++
++#. Eduka-Orca
++msgid "Show captions of speech on screen"
++msgstr "Mostrar legendas da fala no ecrã"
+diff --git a/po/pt_BR.po b/po/pt_BR.po
+index e279f69..fe24fb2 100644
+--- a/po/pt_BR.po
++++ b/po/pt_BR.po
+@@ -15289,3 +15289,7 @@ msgstr "ortografia"
+ 
+ #~ msgid "Enable Braille _monitor"
+ #~ msgstr "Habilitar o _monitor Braille"
++
++#. Eduka-Orca
++msgid "Show captions of speech on screen"
++msgstr "Mostrar legendas da fala na tela"
+diff --git a/src/orca/acss.py b/src/orca/acss.py
+index 7d625e4..b0a6d1f 100644
+--- a/src/orca/acss.py
++++ b/src/orca/acss.py
+@@ -48,9 +48,9 @@ class ACSS(dict):
+ 
+     settings: ClassVar[dict[str, str | int | None]] = {
+         FAMILY: None,  # None means use the engine's default value.
+-        RATE: 50,
++        RATE: 30,  # Eduka-Orca: slower speech (upstream: 50)
+         GAIN: 10,
+-        AVERAGE_PITCH: 5,
++        AVERAGE_PITCH: 4.5,  # Eduka-Orca: slightly lower voice (upstream: 5)
+         PITCH_RANGE: 5,
+         STRESS: 5,
+         RICHNESS: 5,
+diff --git a/src/orca/eduka_defaults.py b/src/orca/eduka_defaults.py
+new file mode 100644
+index 0000000..55bc3b8
+--- /dev/null
++++ b/src/orca/eduka_defaults.py
+@@ -0,0 +1,68 @@
++# Eduka-Orca
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""Default values used by Eduka-Orca, the Orca build for Edukasaun OS (Eduka-Desktop).
++
++Eduka-Orca is tuned for people who are hard of hearing:
++
++* speech is slower than upstream Orca (rate 30 instead of 50, on a 0-100 scale), so that
++  words are not rushed together;
++* the voice is slightly lower (pitch 4.5 instead of 5.0); lower frequencies are usually
++  easier to hear for people with age-related or noise-induced hearing loss;
++* volume stays at the maximum;
++* everything Orca speaks is also shown as large, high-contrast captions in the
++  speech monitor window, which is enabled by default.
++
++Every value here is only a default: users can still change all of them in the Orca
++preferences, and administrators can override them with a GSettings override file.
++
++The GSettings schema defaults are written as literals in the @gsetting decorators
++(the schema generator only reads literals); tests/unit_tests/test_eduka_defaults.py
++checks that they stay in sync with the values below.
++"""
++
++from __future__ import annotations
++
++# Speech rate on Orca's 0-100 scale (upstream default: 50).
++# Speech-dispatcher receives 2 * rate - 100, so 30 becomes -40.
++DEFAULT_RATE: int = 30
++
++# Average pitch on Orca's 0.0-10.0 scale (upstream default: 5.0).
++DEFAULT_PITCH: float = 4.5
++
++# Volume on Orca's 0.0-10.0 scale (same as upstream: maximum).
++DEFAULT_VOLUME: float = 10.0
++
++# Speech monitor (on-screen captions of everything Orca says).
++MONITOR_ENABLED: bool = True
++MONITOR_FONT_SIZE: int = 24
++MONITOR_FOREGROUND: str = "#ffff00"
++MONITOR_BACKGROUND: str = "#000000"
++
++# Fraction of the screen height used by the caption window, which is docked at the
++# bottom of the screen like television subtitles.
++MONITOR_HEIGHT_FRACTION: float = 0.28
++
++# Languages without a speech-dispatcher / eSpeak NG voice, mapped to the closest voice.
++# Tetum (Timor-Leste) uses Portuguese-based spelling, so a European Portuguese voice
++# pronounces it far better than the English fallback speech-dispatcher would otherwise use.
++SPEECH_LANGUAGE_FALLBACKS: dict[str, tuple[str, str]] = {
++    "tet": ("pt", "PT"),
++}
++
++
++def map_speech_language(language: str, dialect: str) -> tuple[str, str]:
++    """Returns (language, dialect), replaced by a fallback voice language when needed."""
++
++    return SPEECH_LANGUAGE_FALLBACKS.get((language or "").lower(), (language, dialect))
+diff --git a/src/orca/gsettings_migrator.py b/src/orca/gsettings_migrator.py
+index 0aa5f4d..6fc8175 100644
+--- a/src/orca/gsettings_migrator.py
++++ b/src/orca/gsettings_migrator.py
+@@ -38,8 +38,8 @@ VOICE_TYPES: list[str] = ["default", "uppercase", "hyperlink", "system"]
+ # TODO - JD: Delete this in v52 (remove -i/--import-dir support).
+ VOICE_MIGRATION_MAP: dict[str, tuple[str, str, Any]] = {
+     "established": ("established", "b", False),
+-    "rate": ("rate", "i", 50),
+-    "average-pitch": ("pitch", "d", 5.0),
++    "rate": ("rate", "i", 30),  # Eduka-Orca default
++    "average-pitch": ("pitch", "d", 4.5),  # Eduka-Orca default
+     "gain": ("volume", "d", 10.0),
+ }
+ 
+diff --git a/src/orca/guilabels.py b/src/orca/guilabels.py
+index eeeffba..60f0a8b 100644
+--- a/src/orca/guilabels.py
++++ b/src/orca/guilabels.py
+@@ -1806,6 +1806,11 @@ BRAILLE_MONITOR_BACKGROUND = _("Background color")
+ # text in the on-screen speech monitor.
+ SPEECH_MONITOR_FONT_SIZE = _("Font size")
+ 
++# Translators: This is the label of a checkbox in the on-screen display settings of
++# Eduka-Orca. When checked, everything the screen reader speaks is also shown as large
++# captions in a window at the bottom of the screen, for users who are hard of hearing.
++SPEECH_MONITOR_ENABLED = _("Show captions of speech on screen")
++
+ # Translators: This is the label of a color button that controls the text color
+ # in the on-screen speech monitor.
+ SPEECH_MONITOR_FOREGROUND = _("Text color")
+diff --git a/src/orca/meson.build b/src/orca/meson.build
+index 7301e5b..1b16ad4 100644
+--- a/src/orca/meson.build
++++ b/src/orca/meson.build
+@@ -133,6 +133,7 @@ lib_sources = [
+   'sound.py',
+   'sound_generator.py',
+   'sound_presenter.py',
++  'eduka_defaults.py',
+   'speech_manager.py',
+   'speech_monitor.py',
+   'speech_presenter.py',
+diff --git a/src/orca/speech_manager.py b/src/orca/speech_manager.py
+index 217a9a8..cf1c2f6 100644
+--- a/src/orca/speech_manager.py
++++ b/src/orca/speech_manager.py
+@@ -46,6 +46,7 @@ from . import (
+     command_manager,
+     dbus_service,
+     debug,
++    eduka_defaults,
+     gsettings_registry,
+     guilabels,
+     input_event,
+@@ -368,7 +369,13 @@ class VoicesPreferencesGrid(preferences_grid_base.PreferencesGridBase):
+         def on_rate_changed(widget: Gtk.Scale) -> None:
+             self._on_rate_changed(widget, voice_type)
+ 
+-        rate_adj = Gtk.Adjustment(value=50, lower=0, upper=100, step_increment=1, page_increment=10)
++        rate_adj = Gtk.Adjustment(
++            value=eduka_defaults.DEFAULT_RATE,
++            lower=0,
++            upper=100,
++            step_increment=1,
++            page_increment=10,
++        )
+         rate_row, rate_scale, _rate_label = self._create_slider_row(
+             guilabels.VOICE_RATE,
+             rate_adj,
+@@ -622,10 +629,10 @@ class VoicesPreferencesGrid(preferences_grid_base.PreferencesGridBase):
+ 
+         voice_acss = self._get_acss_for_voice_type(voice_type)
+ 
+-        rate = voice_acss.get(ACSS.RATE, 50)
++        rate = voice_acss.get(ACSS.RATE, eduka_defaults.DEFAULT_RATE)
+         rate_scale.set_value(rate)
+ 
+-        pitch = voice_acss.get(ACSS.AVERAGE_PITCH, 5.0)
++        pitch = voice_acss.get(ACSS.AVERAGE_PITCH, eduka_defaults.DEFAULT_PITCH)
+         pitch_scale.set_value(pitch)
+ 
+         volume = voice_acss.get(ACSS.GAIN, 10.0)
+@@ -2073,7 +2080,7 @@ class SpeechManager:
+         key=KEY_RATE,
+         schema="voice",
+         gtype="i",
+-        default=50,
++        default=30,  # Eduka-Orca: keep in sync with eduka_defaults.DEFAULT_RATE
+         summary="Speech rate (0-100)",
+     )
+     @dbus_service.getter
+@@ -2084,12 +2091,12 @@ class SpeechManager:
+             self._VOICE_SCHEMA,
+             self.KEY_RATE,
+             "i",
+-            default=50,
++            default=eduka_defaults.DEFAULT_RATE,
+         )
+ 
+     @dbus_service.setter
+     def set_rate(self, value: int) -> bool:
+-        """Sets the current speech rate (0-100, default: 50)."""
++        """Sets the current speech rate (0-100, Eduka-Orca default: 30)."""
+ 
+         if not isinstance(value, (int, float)):
+             return False
+@@ -2176,7 +2183,7 @@ class SpeechManager:
+         key=KEY_PITCH,
+         schema="voice",
+         gtype="d",
+-        default=5.0,
++        default=4.5,  # Eduka-Orca: keep in sync with eduka_defaults.DEFAULT_PITCH
+         summary="Speech pitch (0.0-10.0)",
+     )
+     @dbus_service.getter
+@@ -2187,12 +2194,12 @@ class SpeechManager:
+             self._VOICE_SCHEMA,
+             self.KEY_PITCH,
+             "d",
+-            default=5.0,
++            default=eduka_defaults.DEFAULT_PITCH,
+         )
+ 
+     @dbus_service.setter
+     def set_pitch(self, value: float) -> bool:
+-        """Sets the current speech pitch (0.0-10.0, default: 5.0)."""
++        """Sets the current speech pitch (0.0-10.0, Eduka-Orca default: 4.5)."""
+ 
+         if not isinstance(value, (int, float)):
+             return False
+diff --git a/src/orca/speech_monitor.py b/src/orca/speech_monitor.py
+index cfd477c..886061c 100644
+--- a/src/orca/speech_monitor.py
++++ b/src/orca/speech_monitor.py
+@@ -29,7 +29,7 @@ import gi
+ gi.require_version("Gtk", "3.0")
+ from gi.repository import Gdk, Gtk
+ 
+-from . import guilabels
++from . import eduka_defaults, guilabels
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Callable
+@@ -66,6 +66,11 @@ class SpeechMonitor(Gtk.Window):  # pylint: disable=too-many-instance-attributes
+         self.set_default_size(1000, 400)
+         self.set_icon_name("orca")
+ 
++        # Eduka-Orca: behave like a subtitle bar. Never take keyboard focus when shown, so
++        # the user keeps working in their application while reading the captions.
++        self.set_focus_on_map(False)
++        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
++
+         titlebar = Gtk.Box()
+         self.set_titlebar(titlebar)
+ 
+@@ -99,6 +104,12 @@ class SpeechMonitor(Gtk.Window):  # pylint: disable=too-many-instance-attributes
+         self._text_view.set_bottom_margin(6)
+         self._buffer = self._text_view.get_buffer()
+         self._end_mark = self._buffer.create_mark("end", self._buffer.get_end_iter(), False)
++        # Eduka-Orca: the newest caption is shown in bold so the eye can find what was
++        # just spoken at a glance.
++        self._latest_start = self._buffer.create_mark(
++            "latest-start", self._buffer.get_end_iter(), True
++        )
++        self._latest_tag = self._buffer.create_tag("eduka-latest", weight=700)
+         self._line_count = 0
+ 
+         scrolled = Gtk.ScrolledWindow()
+@@ -131,10 +142,32 @@ class SpeechMonitor(Gtk.Window):  # pylint: disable=too-many-instance-attributes
+         self.set_skip_pager_hint(True)
+ 
+         self.set_focus(self._text_view)
++        self.connect("realize", self._on_realize)
+         self.connect("notify::is-active", self._on_window_activated)
+         self.connect("delete-event", self._on_delete_event)
+         self.connect("key-press-event", self._on_key_press)
+ 
++    def _on_realize(self, _window: Gtk.Window) -> None:
++        """Dock the window along the bottom of the monitor, like television subtitles."""
++
++        # pylint: disable=no-member
++        try:
++            display = Gdk.Display.get_default()
++            gdk_window = self.get_window()
++            monitor = None
++            if display is not None:
++                monitor = display.get_monitor_at_window(gdk_window) if gdk_window else None
++                monitor = monitor or display.get_primary_monitor() or display.get_monitor(0)
++            if monitor is None:
++                return
++            area = monitor.get_workarea()
++            height = max(160, int(area.height * eduka_defaults.MONITOR_HEIGHT_FRACTION))
++            self.resize(area.width, height)
++            # Positioning is ignored on Wayland; there the compositor decides placement.
++            self.move(area.x, area.y + area.height - height)
++        except (AttributeError, TypeError):
++            pass
++
+     def _on_window_activated(self, _window: Gtk.Window, _pspec: Any) -> None:
+         """Grab focus on the text view whenever the window becomes active."""
+ 
+@@ -236,7 +269,17 @@ class SpeechMonitor(Gtk.Window):  # pylint: disable=too-many-instance-attributes
+     def _append_text(self, text: str) -> None:
+         """Appends text, trims excess lines, and scrolls to the bottom."""
+ 
++        # Eduka-Orca: move the "latest" highlight to the new caption.
++        start = self._buffer.get_start_iter()
++        end = self._buffer.get_end_iter()
++        self._buffer.remove_tag(self._latest_tag, start, end)
++        self._buffer.move_mark(self._latest_start, end)
+         self._buffer.insert(self._buffer.get_end_iter(), text)
++        self._buffer.apply_tag(
++            self._latest_tag,
++            self._buffer.get_iter_at_mark(self._latest_start),
++            self._buffer.get_end_iter(),
++        )
+         self._line_count += text.count("\n")
+         if self._line_count > 500:
+             excess = self._line_count - 500
+diff --git a/src/orca/speech_presenter.py b/src/orca/speech_presenter.py
+index d21b803..4a25d47 100644
+--- a/src/orca/speech_presenter.py
++++ b/src/orca/speech_presenter.py
+@@ -47,6 +47,7 @@ from . import (
+     dbus_service,
+     debug,
+     document_presenter,
++    eduka_defaults,
+     focus_manager,
+     gsettings_registry,
+     guilabels,
+@@ -491,6 +492,12 @@ class SpeechOSDPreferencesGrid(preferences_grid_base.AutoPreferencesGrid):
+ 
+     def __init__(self, presenter: SpeechPresenter) -> None:
+         controls: list[preferences_grid_base.ControlType] = [
++            preferences_grid_base.BooleanPreferenceControl(
++                label=guilabels.SPEECH_MONITOR_ENABLED,
++                getter=presenter.get_monitor_is_enabled,
++                setter=presenter.set_monitor_is_enabled,
++                prefs_key=SpeechPresenter.KEY_MONITOR_ENABLED,
++            ),
+             preferences_grid_base.IntRangePreferenceControl(
+                 label=guilabels.SPEECH_MONITOR_FONT_SIZE,
+                 getter=presenter.get_monitor_font_size,
+@@ -525,8 +532,8 @@ class SpeechPreferencesGrid(preferences_grid_base.PreferencesGridBase):
+     """Main speech preferences grid with enable toggle and categorized settings."""
+ 
+     _VOICE_PROPERTY_MAP = (
+-        ("rate", "rate", "i", 50),
+-        ("average-pitch", "pitch", "d", 5.0),
++        ("rate", "rate", "i", eduka_defaults.DEFAULT_RATE),
++        ("average-pitch", "pitch", "d", eduka_defaults.DEFAULT_PITCH),
+         ("gain", "volume", "d", 10.0),
+         ("established", "established", "b", False),
+     )
+@@ -834,6 +841,7 @@ class SpeechPresenter:
+     KEY_VERBOSITY_LEVEL = "verbosity-level"
+     KEY_SPEAK_INDENTATION_AND_JUSTIFICATION = "speak-indentation-and-justification"
+     KEY_SPEAK_INDENTATION_ONLY_IF_CHANGED = "speak-indentation-only-if-changed"
++    KEY_MONITOR_ENABLED = "monitor-enabled"
+     KEY_MONITOR_FONT_SIZE = "monitor-font-size"
+     KEY_MONITOR_FOREGROUND = "monitor-foreground"
+     KEY_MONITOR_BACKGROUND = "monitor-background"
+@@ -2200,11 +2208,22 @@ class SpeechPresenter:
+             return generator.voice(obj=obj, string=text, context=context)
+         return []
+ 
++    @gsettings_registry.get_registry().gsetting(
++        key=KEY_MONITOR_ENABLED,
++        schema="speech",
++        gtype="b",
++        default=True,  # Eduka-Orca: keep in sync with eduka_defaults.MONITOR_ENABLED
++        summary="Show on-screen captions of everything Orca speaks (Eduka-Orca)",
++    )
+     @dbus_service.getter
+     def get_monitor_is_enabled(self) -> bool:
+-        """Returns whether the speech monitor is enabled."""
++        """Returns whether the speech monitor (on-screen captions) is enabled."""
+ 
+-        return self._monitor_enabled_override or False
++        if self._monitor_enabled_override is not None:
++            return self._monitor_enabled_override
++        return bool(
++            self._get_setting(self.KEY_MONITOR_ENABLED, "b", eduka_defaults.MONITOR_ENABLED)
++        )
+ 
+     @dbus_service.setter
+     def set_monitor_is_enabled(self, value: bool) -> bool:
+@@ -2221,7 +2240,7 @@ class SpeechPresenter:
+         key=KEY_MONITOR_FONT_SIZE,
+         schema="speech",
+         gtype="i",
+-        default=14,
++        default=24,  # Eduka-Orca: keep in sync with eduka_defaults.MONITOR_FONT_SIZE
+         summary="Speech monitor font size",
+         migration_key="speechMonitorFontSize",
+     )
+@@ -2229,7 +2248,7 @@ class SpeechPresenter:
+     def get_monitor_font_size(self) -> int:
+         """Returns the speech monitor font size."""
+ 
+-        return self._get_setting(self.KEY_MONITOR_FONT_SIZE, "i", 14)
++        return self._get_setting(self.KEY_MONITOR_FONT_SIZE, "i", eduka_defaults.MONITOR_FONT_SIZE)
+ 
+     @dbus_service.setter
+     def set_monitor_font_size(self, value: int) -> bool:
+@@ -2250,7 +2269,7 @@ class SpeechPresenter:
+         key=KEY_MONITOR_FOREGROUND,
+         schema="speech",
+         gtype="s",
+-        default="#ffffff",
++        default="#ffff00",  # Eduka-Orca: keep in sync with eduka_defaults.MONITOR_FOREGROUND
+         summary="Speech monitor foreground color",
+         migration_key="speechMonitorForeground",
+     )
+@@ -2258,7 +2277,9 @@ class SpeechPresenter:
+     def get_monitor_foreground(self) -> str:
+         """Returns the speech monitor foreground color."""
+ 
+-        return self._get_setting(self.KEY_MONITOR_FOREGROUND, "s", "#ffffff")
++        return self._get_setting(
++            self.KEY_MONITOR_FOREGROUND, "s", eduka_defaults.MONITOR_FOREGROUND
++        )
+ 
+     @dbus_service.setter
+     def set_monitor_foreground(self, value: str) -> bool:
+@@ -2287,7 +2308,9 @@ class SpeechPresenter:
+     def get_monitor_background(self) -> str:
+         """Returns the speech monitor background color."""
+ 
+-        return self._get_setting(self.KEY_MONITOR_BACKGROUND, "s", "#000000")
++        return self._get_setting(
++            self.KEY_MONITOR_BACKGROUND, "s", eduka_defaults.MONITOR_BACKGROUND
++        )
+ 
+     @dbus_service.setter
+     def set_monitor_background(self, value: str) -> bool:
+@@ -2322,8 +2345,9 @@ class SpeechPresenter:
+                 background=self.get_monitor_background(),
+                 on_close=lambda: self.set_monitor_is_enabled(False),
+             )
++            # Eduka-Orca: show the captions without stealing keyboard focus from the
++            # application the user is working in.
+             self._monitor.show_all()  # pylint: disable=no-member
+-            self._monitor.present_with_time(time.time())
+             self._replay_history()
+ 
+         return self._monitor
+diff --git a/src/orca/speechdispatcherfactory.py b/src/orca/speechdispatcherfactory.py
+index 265aa06..5be9e73 100644
+--- a/src/orca/speechdispatcherfactory.py
++++ b/src/orca/speechdispatcherfactory.py
+@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any
+ 
+ from gi.repository import GLib
+ 
+-from . import debug, focus_manager, guilabels, mathsymbols, speechserver
++from . import debug, eduka_defaults, focus_manager, guilabels, mathsymbols, speechserver
+ from .acss import ACSS
+ from .ax_utilities import AXUtilities
+ from .speechserver import CapitalizationStyle, PunctuationStyle
+@@ -287,6 +287,8 @@ class SpeechServer(speechserver.SpeechServer):
+                 if len(locale_values) == 2:
+                     dialect = locale_values[1]
+ 
++        # Eduka-Orca: use a Portuguese voice for Tetum, which eSpeak NG does not support.
++        language, dialect = eduka_defaults.map_speech_language(str(language), str(dialect))
+         return str(language), str(dialect)
+ 
+     def _set_family(self, acss_family: dict[str, Any] | None) -> None:
+@@ -352,14 +354,14 @@ class SpeechServer(speechserver.SpeechServer):
+                     method(value)
+                     current[acss_property] = value
+             elif acss_property == ACSS.AVERAGE_PITCH:
+-                self._set_pitch(5.0)
+-                current[acss_property] = 5.0
++                self._set_pitch(eduka_defaults.DEFAULT_PITCH)
++                current[acss_property] = eduka_defaults.DEFAULT_PITCH
+             elif acss_property == ACSS.GAIN:
+                 self._set_volume(10.0)
+                 current[acss_property] = 10.0
+             elif acss_property == ACSS.RATE:
+-                self._set_rate(50.0)
+-                current[acss_property] = 50.0
++                self._set_rate(float(eduka_defaults.DEFAULT_RATE))
++                current[acss_property] = float(eduka_defaults.DEFAULT_RATE)
+             elif acss_property == ACSS.FAMILY:
+                 self._set_family({})
+                 current[acss_property] = {}
+@@ -433,7 +435,7 @@ class SpeechServer(speechserver.SpeechServer):
+ 
+     def _change_default_speech_rate(self, step: int, decrease: bool = False) -> None:
+         delta = step * (-1 if decrease else 1)
+-        rate = self._default_voice.get(ACSS.RATE, 50)
++        rate = self._default_voice.get(ACSS.RATE, eduka_defaults.DEFAULT_RATE)
+         new_rate = max(0, min(99, rate + delta))
+         self._default_voice[ACSS.RATE] = new_rate
+         self._set_rate(new_rate)
+@@ -475,6 +477,10 @@ class SpeechServer(speechserver.SpeechServer):
+             return ""
+ 
+         locale_lang, locale_dialect = current_locale.split("_")
++        # Eduka-Orca: use a Portuguese voice for Tetum, which eSpeak NG does not support.
++        locale_lang, locale_dialect = eduka_defaults.map_speech_language(
++            locale_lang, locale_dialect
++        )
+         locale_language = locale_lang + "-" + locale_dialect
+         for _name, lang, _variant in voices:
+             if lang == locale_language:
+diff --git a/tests/unit_tests/test_eduka_defaults.py b/tests/unit_tests/test_eduka_defaults.py
+new file mode 100644
+index 0000000..0bff088
+--- /dev/null
++++ b/tests/unit_tests/test_eduka_defaults.py
+@@ -0,0 +1,140 @@
++# Eduka-Orca
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""Checks that Eduka-Orca's slow-speech and caption defaults are applied everywhere."""
++
++from __future__ import annotations
++
++import ast
++import importlib.util
++import subprocess
++import sys
++import xml.etree.ElementTree as ET
++from pathlib import Path
++from typing import Any
++
++import pytest
++
++SRC = Path(__file__).resolve().parents[2] / "src" / "orca"
++TOOLS = Path(__file__).resolve().parents[2] / "tools"
++
++
++def _load_defaults() -> Any:
++    spec = importlib.util.spec_from_file_location("eduka_defaults", SRC / "eduka_defaults.py")
++    assert spec is not None and spec.loader is not None
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++EDUKA = _load_defaults()
++
++
++def _decorator_default(filename: str, key_constant: str) -> Any:
++    """Returns the literal default= of the @gsetting decorator using key=<key_constant>."""
++
++    tree = ast.parse((SRC / filename).read_text())
++    for node in ast.walk(tree):
++        if not isinstance(node, ast.FunctionDef):
++            continue
++        for decorator in node.decorator_list:
++            if not isinstance(decorator, ast.Call):
++                continue
++            keywords = {kw.arg: kw.value for kw in decorator.keywords}
++            key = keywords.get("key")
++            if isinstance(key, ast.Name) and key.id == key_constant and "default" in keywords:
++                return ast.literal_eval(keywords["default"])
++    raise AssertionError(f"No @gsetting with key={key_constant} in {filename}")
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize(
++    ("filename", "key_constant", "expected"),
++    [
++        ("speech_manager.py", "KEY_RATE", EDUKA.DEFAULT_RATE),
++        ("speech_manager.py", "KEY_PITCH", EDUKA.DEFAULT_PITCH),
++        ("speech_manager.py", "KEY_VOLUME", EDUKA.DEFAULT_VOLUME),
++        ("speech_presenter.py", "KEY_MONITOR_ENABLED", EDUKA.MONITOR_ENABLED),
++        ("speech_presenter.py", "KEY_MONITOR_FONT_SIZE", EDUKA.MONITOR_FONT_SIZE),
++        ("speech_presenter.py", "KEY_MONITOR_FOREGROUND", EDUKA.MONITOR_FOREGROUND),
++        ("speech_presenter.py", "KEY_MONITOR_BACKGROUND", EDUKA.MONITOR_BACKGROUND),
++    ],
++)
++def test_schema_literals_match_eduka_defaults(filename: str, key_constant: str, expected: Any):
++    """The literal schema defaults must match eduka_defaults.py."""
++
++    assert _decorator_default(filename, key_constant) == expected
++
++
++@pytest.mark.unit
++def test_speech_is_slower_and_lower_than_upstream():
++    """Eduka-Orca must speak slower and slightly lower than upstream Orca (50 / 5.0)."""
++
++    assert 0 < EDUKA.DEFAULT_RATE < 50
++    assert 0.0 < EDUKA.DEFAULT_PITCH < 5.0
++    assert EDUKA.DEFAULT_VOLUME == 10.0
++    # Speech-dispatcher range is -100..100; make sure the result is still intelligible.
++    assert -60 <= 2 * EDUKA.DEFAULT_RATE - 100 < 0
++
++
++@pytest.mark.unit
++def test_no_upstream_rate_fallbacks_left():
++    """No runtime fallback should silently bring back the upstream rate of 50."""
++
++    for filename in ("speech_manager.py", "speech_presenter.py", "speechdispatcherfactory.py"):
++        text = (SRC / filename).read_text()
++        assert "ACSS.RATE, 50)" not in text, filename
++        assert "_set_rate(50" not in text, filename
++        assert '"rate", "i", 50' not in text, filename
++
++
++@pytest.mark.unit
++def test_generated_schema_contains_eduka_defaults(tmp_path: Path):
++    """The generated org.gnome.Orca schema must carry the Eduka defaults."""
++
++    output = tmp_path / "org.gnome.Orca.gschema.xml"
++    generator = TOOLS / "generate_gsettings_schemas.py"
++    subprocess.run([sys.executable, str(generator), str(SRC.parent), str(output)], check=True)
++    root = ET.parse(output).getroot()
++
++    def default_of(schema_id: str, key_name: str) -> str:
++        for schema in root.iter("schema"):
++            if schema.get("id") != schema_id:
++                continue
++            for key in schema.iter("key"):
++                if key.get("name") == key_name:
++                    return (key.findtext("default") or "").strip()
++        raise AssertionError(f"{schema_id}:{key_name} not in generated schema")
++
++    assert default_of("org.gnome.Orca.Voice", "rate") == str(EDUKA.DEFAULT_RATE)
++    assert float(default_of("org.gnome.Orca.Voice", "pitch")) == EDUKA.DEFAULT_PITCH
++    assert default_of("org.gnome.Orca.Speech", "monitor-enabled") == "true"
++    assert default_of("org.gnome.Orca.Speech", "monitor-font-size") == str(EDUKA.MONITOR_FONT_SIZE)
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize(
++    ("language", "dialect", "expected"),
++    [
++        ("tet", "TL", ("pt", "PT")),
++        ("TET", "", ("pt", "PT")),
++        ("id", "ID", ("id", "ID")),
++        ("pt", "BR", ("pt", "BR")),
++        ("", "", ("", "")),
++    ],
++)
++def test_tetum_uses_portuguese_voice(language: str, dialect: str, expected: tuple[str, str]):
++    """Tetum has no eSpeak NG voice, so it must fall back to European Portuguese."""
++
++    assert EDUKA.map_speech_language(language, dialect) == expected
+-- 
+2.43.0
+

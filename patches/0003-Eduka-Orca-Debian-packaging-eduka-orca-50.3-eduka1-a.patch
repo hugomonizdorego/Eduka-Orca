@@ -1,0 +1,275 @@
+From dc7473e9199bff1ffd200d80462629beb55c5b36 Mon Sep 17 00:00:00 2001
+From: Edukasaun OS <hugomonizdorego@angelinojoana.com>
+Date: Wed, 30 Sep 2026 19:23:23 +0900
+Subject: [PATCH 3/3] Eduka-Orca: Debian packaging (eduka-orca 50.3+eduka1) and
+ man page
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KtDnhykBZ6mr4wBxEvfHXz
+---
+ debian/changelog     | 16 +++++++++
+ debian/control       | 80 ++++++++++++++++++++++++++++++++++++++++++++
+ debian/copyright     | 27 +++++++++++++++
+ debian/rules         | 23 +++++++++++++
+ debian/source/format |  1 +
+ eduka/eduka-orca.1   | 45 +++++++++++++++++++++++++
+ eduka/meson.build    | 12 +++++++
+ 7 files changed, 204 insertions(+)
+ create mode 100644 debian/changelog
+ create mode 100644 debian/control
+ create mode 100644 debian/copyright
+ create mode 100755 debian/rules
+ create mode 100644 debian/source/format
+ create mode 100644 eduka/eduka-orca.1
+
+diff --git a/debian/changelog b/debian/changelog
+new file mode 100644
+index 0000000..9d1d7a1
+--- /dev/null
++++ b/debian/changelog
+@@ -0,0 +1,16 @@
++eduka-orca (50.3+eduka1) trixie; urgency=medium
++
++  * First Eduka-Orca release for Edukasaun OS, based on Orca 50.3.
++  * Slower default speech (rate 30) and slightly lower pitch (4.5) for
++    users who are hard of hearing.
++  * On-screen captions (speech monitor) on by default: 24 pt yellow on
++    black, docked at the bottom of the screen, does not steal focus,
++    newest line in bold; setting persisted in GSettings.
++  * Tetum locale uses a European Portuguese voice.
++  * Eduka-Desktop (LXQt) integration: autostart helper, Qt accessibility
++    environment, "Eduka-Orca" menu entry, on/off toggle with notification,
++    Super+Alt+S shortcut snippet.
++  * Rate, pitch, volume and caption settings honour GSettings vendor
++    overrides so schools can tune them system-wide.
++
++ -- Edukasaun OS <hugomonizdorego@angelinojoana.com>  Wed, 30 Sep 2026 19:00:00 +0900
+diff --git a/debian/control b/debian/control
+new file mode 100644
+index 0000000..ee53a8d
+--- /dev/null
++++ b/debian/control
+@@ -0,0 +1,80 @@
++Source: eduka-orca
++Section: gnome
++Priority: optional
++Maintainer: Edukasaun OS <hugomonizdorego@angelinojoana.com>
++Build-Depends:
++ debhelper-compat (= 13),
++ dh-python,
++ gettext,
++ gir1.2-atspi-2.0 (>= 2.56),
++ gir1.2-gtk-3.0,
++ itstool,
++ libatk-bridge2.0-dev (>= 2.56),
++ libatspi2.0-dev (>= 2.56),
++ libglib2.0-bin,
++ libxml2-utils,
++ liblouis-dev,
++ meson (>= 1.0),
++ pkgconf,
++ python-gi-dev,
++ python3 (>= 3.10),
++ python3-dasbus,
++ python3-gi,
++ python3-pytest <!nocheck>,
++ python3-speechd,
++ systemd-dev,
++ yelp-tools,
++Standards-Version: 4.7.0
++Rules-Requires-Root: no
++Homepage: https://edukasaunos.tl/
++X-Upstream-Homepage: https://orca.gnome.org/
++
++Package: eduka-orca
++Architecture: all
++Depends:
++ ${misc:Depends},
++ ${python3:Depends},
++ at-spi2-core,
++ gir1.2-atspi-2.0 (>= 2.56),
++ gir1.2-gtk-3.0,
++ gsettings-desktop-schemas,
++ libatk-adaptor,
++ libglib2.0-bin,
++ procps,
++ python3-dasbus,
++ python3-gi (>= 3.18),
++ python3-speechd,
++ speech-dispatcher,
++Recommends:
++ gir1.2-wnck-3.0,
++ libnotify-bin,
++ python3-babel,
++ python3-brlapi,
++ python3-louis,
++ python3-psutil,
++ speech-dispatcher-espeak-ng,
++ xbrlapi,
++Provides:
++ gnome-orca,
++ orca,
++Conflicts:
++ gnome-orca,
++ orca,
++Replaces:
++ gnome-orca,
++ orca,
++Description: Orca screen reader for Edukasaun OS (Eduka-Desktop / LXQt)
++ Eduka-Orca is the Orca 50.3 screen reader tuned for Edukasaun OS and its
++ LXQt-based Eduka-Desktop, with a focus on users who are hard of hearing:
++ .
++  * slower speech by default (rate 30 instead of 50) and a slightly lower
++    voice (pitch 4.5 instead of 5.0);
++  * on-screen captions of everything Orca speaks, on by default: large
++    yellow-on-black text docked at the bottom of the screen that never takes
++    keyboard focus;
++  * Tetum uses a European Portuguese voice, since eSpeak NG has no Tetum;
++  * LXQt autostart, Qt accessibility environment, an "Eduka-Orca" menu entry
++    and an on/off toggle with desktop notifications.
++ .
++ All defaults can be changed per user in the Orca preferences, or
++ system-wide with a GSettings override file.
+diff --git a/debian/copyright b/debian/copyright
+new file mode 100644
+index 0000000..ce09ff4
+--- /dev/null
++++ b/debian/copyright
+@@ -0,0 +1,27 @@
++Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
++Upstream-Name: orca
++Upstream-Contact: Joanmarie Diggs <jdiggs@igalia.com>
++Source: https://github.com/GNOME/orca
++
++Files: *
++Copyright: 2004-2026 Sun Microsystems Inc., The GNOME Foundation,
++           Igalia, S.L., and the Orca contributors (see AUTHORS)
++License: LGPL-2.1+
++
++Files: src/orca/eduka_defaults.py eduka/* tests/unit_tests/test_eduka_defaults.py debian/*
++Copyright: 2026 Edukasaun OS
++License: LGPL-2.1+
++
++License: LGPL-2.1+
++ This library is free software; you can redistribute it and/or
++ modify it under the terms of the GNU Lesser General Public
++ License as published by the Free Software Foundation; either
++ version 2.1 of the License, or (at your option) any later version.
++ .
++ This library is distributed in the hope that it will be useful,
++ but WITHOUT ANY WARRANTY; without even the implied warranty of
++ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ Lesser General Public License for more details.
++ .
++ On Debian systems, the complete text of the GNU Lesser General Public
++ License version 2.1 can be found in "/usr/share/common-licenses/LGPL-2.1".
+diff --git a/debian/rules b/debian/rules
+new file mode 100755
+index 0000000..e6ebfa8
+--- /dev/null
++++ b/debian/rules
+@@ -0,0 +1,23 @@
++#!/usr/bin/make -f
++# Eduka-Orca Debian packaging for Edukasaun OS (Debian 13 "trixie" based).
++
++export DEB_BUILD_MAINT_OPTIONS = hardening=+all
++
++%:
++	dh $@ --with python3 --buildsystem=meson
++
++override_dh_auto_configure:
++	dh_auto_configure -- \
++		-Dspiel=false \
++		-Dpython.purelibdir=/usr/lib/python3/dist-packages
++
++# Upstream's integration tests need a running desktop session; run the
++# Eduka checks (defaults, schema, Tetum voice mapping) instead.
++override_dh_auto_test:
++ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
++	python3 -m pytest -q -p no:cacheprovider --noconftest \
++		tests/unit_tests/test_eduka_defaults.py
++endif
++
++override_dh_python3:
++	dh_python3 --shebang=/usr/bin/python3
+diff --git a/debian/source/format b/debian/source/format
+new file mode 100644
+index 0000000..89ae9db
+--- /dev/null
++++ b/debian/source/format
+@@ -0,0 +1 @@
++3.0 (native)
+diff --git a/eduka/eduka-orca.1 b/eduka/eduka-orca.1
+new file mode 100644
+index 0000000..6bc3371
+--- /dev/null
++++ b/eduka/eduka-orca.1
+@@ -0,0 +1,45 @@
++.TH EDUKA-ORCA 1 "September 2026" "Eduka-Orca 50.3" "Edukasaun OS"
++.SH NAME
++eduka-orca, eduka-orca-toggle, eduka-orca-autostart \- Orca screen reader for Eduka-Desktop
++.SH SYNOPSIS
++.B eduka-orca
++.RI [ orca-options ]
++.br
++.B eduka-orca-toggle
++.br
++.B eduka-orca-autostart
++.SH DESCRIPTION
++Eduka-Orca is the Orca screen reader as packaged for Edukasaun OS and the
++Eduka-Desktop (LXQt). It speaks more slowly (rate 30 instead of 50) with a
++slightly lower voice (pitch 4.5 instead of 5.0), and shows everything it speaks
++as large captions at the bottom of the screen, to help users who are hard of
++hearing.
++.PP
++.B eduka-orca
++starts Orca with Qt accessibility enabled. All options are passed to
++.BR orca (1),
++for example
++.B \-\-replace
++or
++.BR \-\-setup .
++.PP
++.B eduka-orca-toggle
++turns the screen reader on or off, remembers the choice in the GSettings key
++.I org.gnome.desktop.a11y.applications screen-reader-enabled
++and shows a desktop notification.
++.PP
++.B eduka-orca-autostart
++is run by the LXQt session at login and starts Eduka-Orca only when that key is
++.IR true .
++The delay before starting can be changed with the environment variable
++.BR EDUKA_ORCA_START_DELAY
++(seconds, default 2).
++.SH FILES
++.TP
++.I /usr/share/doc/eduka-orca/README.Eduka.md
++Description of all Eduka changes and how to change the defaults system-wide.
++.TP
++.I /usr/share/eduka-orca/globalkeyshortcuts-eduka-orca.conf
++Super+Alt+S shortcut for lxqt-globalkeyshortcuts.
++.SH SEE ALSO
++.BR orca (1)
+diff --git a/eduka/meson.build b/eduka/meson.build
+index 02f264c..1b4639b 100644
+--- a/eduka/meson.build
++++ b/eduka/meson.build
+@@ -42,3 +42,15 @@ install_data(
+   'README.Eduka.md',
+   install_dir: get_option('datadir') / 'doc' / 'eduka-orca',
+ )
++
++install_man('eduka-orca.1')
++install_symlink(
++  'eduka-orca-toggle.1',
++  pointing_to: 'eduka-orca.1',
++  install_dir: get_option('mandir') / 'man1',
++)
++install_symlink(
++  'eduka-orca-autostart.1',
++  pointing_to: 'eduka-orca.1',
++  install_dir: get_option('mandir') / 'man1',
++)
+-- 
+2.43.0
+
