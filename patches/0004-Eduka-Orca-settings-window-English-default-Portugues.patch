@@ -1,0 +1,4752 @@
+From 20a70f76f9c5a6393eaacb247fab6927582d5f13 Mon Sep 17 00:00:00 2001
+From: Edukasaun OS <hugomonizdorego@angelinojoana.com>
+Date: Thu, 1 Oct 2026 01:04:43 +0000
+Subject: [PATCH] Eduka-Orca: settings window, English default,
+ Portuguese/Indonesian/Tetum
+
+New "Eduka-Orca Settings" window (eduka-orca-settings, GTK 3), designed
+for users who are hard of hearing or have low vision:
+- pages for Home (on/off, quick settings), Language, Speech (speed
+  presets, pitch, volume, voice test), Captions (size, colour presets,
+  live preview), Reading and typing, Startup, and About
+- every change is saved at once and applied live to a running Orca
+  through its D-Bus remote controller; language and mouse review offer
+  a "Restart now" button
+- keyboard navigation everywhere, accessible names and descriptions,
+  optional large text and high contrast for the window itself
+
+Languages: English is the default; Portuguese, Indonesian and Tetum are
+supported for the settings window (gettext domain eduka-orca) and for
+Orca itself (LANGUAGE and EDUKA_ORCA_LANGUAGE set by eduka-orca). Tetum
+falls back to Portuguese messages and a European Portuguese voice.
+
+New GSettings schema org.edukasaun.EdukaOrca (language, startup mode
+remember/always/never, start delay, welcome message, notifications,
+large text, high contrast). eduka-orca-toggle gains --on, --off,
+--restart and --status. README.Eduka.md, man page and all script
+messages are now in English. Version 50.3+eduka2.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MEUrBstBSs9Sb2HB9NGk9C
+---
+ debian/changelog                              |   18 +
+ debian/control                                |    5 +-
+ debian/copyright                              |    3 +-
+ debian/rules                                  |    5 +-
+ eduka/90_eduka-orca.gschema.override          |    9 +
+ eduka/README.Eduka.md                         |  189 +--
+ eduka/bin/eduka-orca                          |   55 +-
+ eduka/bin/eduka-orca-autostart                |   40 +-
+ eduka/bin/eduka-orca-settings.in              |   13 +
+ eduka/bin/eduka-orca-toggle                   |  113 +-
+ eduka/eduka-orca.1                            |   63 +-
+ eduka/meson.build                             |   46 +-
+ eduka/org.edukasaun.EdukaOrca.gschema.xml     |   63 +
+ eduka/po/LINGUAS                              |    3 +
+ eduka/po/POTFILES.in                          |    1 +
+ eduka/po/id.po                                |  460 +++++++
+ eduka/po/meson.build                          |    2 +
+ eduka/po/pt.po                                |  460 +++++++
+ eduka/po/tet.po                               |  460 +++++++
+ .../settings/eduka_orca_settings/__init__.py  |   17 +
+ .../settings/eduka_orca_settings/__main__.py  |   21 +
+ eduka/settings/eduka_orca_settings/app.py     | 1134 +++++++++++++++++
+ eduka/settings/eduka_orca_settings/backend.py |  577 +++++++++
+ eduka/settings/eduka_orca_settings/i18n.py    |  117 ++
+ eduka/xdg/eduka-orca-settings.desktop         |   26 +
+ eduka/xdg/eduka-orca.desktop                  |   23 +-
+ po/LINGUAS                                    |    1 +
+ po/tet.po                                     |   22 +
+ src/orca/eduka_defaults.py                    |   28 +
+ src/orca/speechdispatcherfactory.py           |    7 +
+ tests/unit_tests/test_eduka_settings.py       |  328 +++++
+ 31 files changed, 4168 insertions(+), 141 deletions(-)
+ create mode 100644 eduka/bin/eduka-orca-settings.in
+ create mode 100644 eduka/org.edukasaun.EdukaOrca.gschema.xml
+ create mode 100644 eduka/po/LINGUAS
+ create mode 100644 eduka/po/POTFILES.in
+ create mode 100644 eduka/po/id.po
+ create mode 100644 eduka/po/meson.build
+ create mode 100644 eduka/po/pt.po
+ create mode 100644 eduka/po/tet.po
+ create mode 100644 eduka/settings/eduka_orca_settings/__init__.py
+ create mode 100644 eduka/settings/eduka_orca_settings/__main__.py
+ create mode 100644 eduka/settings/eduka_orca_settings/app.py
+ create mode 100644 eduka/settings/eduka_orca_settings/backend.py
+ create mode 100644 eduka/settings/eduka_orca_settings/i18n.py
+ create mode 100644 eduka/xdg/eduka-orca-settings.desktop
+ create mode 100644 po/tet.po
+ create mode 100644 tests/unit_tests/test_eduka_settings.py
+
+diff --git a/debian/changelog b/debian/changelog
+index 9d1d7a1..f586a1f 100644
+--- a/debian/changelog
++++ b/debian/changelog
+@@ -1,3 +1,21 @@
++eduka-orca (50.3+eduka2) trixie; urgency=medium
++
++  * New "Eduka-Orca Settings" window (eduka-orca-settings), redesigned for
++    users who are hard of hearing or have low vision: one page each for
++    language, speech (speed presets, pitch, volume, voice test), captions
++    (size, colour presets, live preview), reading and typing, startup and
++    about. Changes are saved at once and applied live to a running Orca over
++    D-Bus. Optional large text and high-contrast mode for the window itself.
++  * Language support for English (default), Portuguese, Indonesian and
++    Tetum, for both the settings window and the screen reader. Tetum falls
++    back to Portuguese messages and uses a European Portuguese voice.
++  * New GSettings schema org.edukasaun.EdukaOrca: language, startup mode
++    (remember/always/never), start delay, welcome message, notifications.
++  * eduka-orca-toggle: new --on, --off, --restart and --status options.
++  * All documentation and script messages are now in English.
++
++ -- Edukasaun OS <hugomonizdorego@angelinojoana.com>  Thu, 01 Oct 2026 09:00:00 +0900
++
+ eduka-orca (50.3+eduka1) trixie; urgency=medium
+ 
+   * First Eduka-Orca release for Edukasaun OS, based on Orca 50.3.
+diff --git a/debian/control b/debian/control
+index ee53a8d..dd9a938 100644
+--- a/debian/control
++++ b/debian/control
+@@ -74,7 +74,10 @@ Description: Orca screen reader for Edukasaun OS (Eduka-Desktop / LXQt)
+     keyboard focus;
+   * Tetum uses a European Portuguese voice, since eSpeak NG has no Tetum;
+   * LXQt autostart, Qt accessibility environment, an "Eduka-Orca" menu entry
+-    and an on/off toggle with desktop notifications.
++    and an on/off toggle with desktop notifications;
++  * "Eduka-Orca Settings", a simple settings window for language, speech
++    speed, captions, reading and typing, and startup options;
++  * English (default), Portuguese, Indonesian and Tetum.
+  .
+  All defaults can be changed per user in the Orca preferences, or
+  system-wide with a GSettings override file.
+diff --git a/debian/copyright b/debian/copyright
+index ce09ff4..04147d0 100644
+--- a/debian/copyright
++++ b/debian/copyright
+@@ -8,7 +8,8 @@ Copyright: 2004-2026 Sun Microsystems Inc., The GNOME Foundation,
+            Igalia, S.L., and the Orca contributors (see AUTHORS)
+ License: LGPL-2.1+
+ 
+-Files: src/orca/eduka_defaults.py eduka/* tests/unit_tests/test_eduka_defaults.py debian/*
++Files: src/orca/eduka_defaults.py eduka/* po/tet.po
++ tests/unit_tests/test_eduka_defaults.py tests/unit_tests/test_eduka_settings.py debian/*
+ Copyright: 2026 Edukasaun OS
+ License: LGPL-2.1+
+ 
+diff --git a/debian/rules b/debian/rules
+index e6ebfa8..59874a4 100755
+--- a/debian/rules
++++ b/debian/rules
+@@ -12,11 +12,12 @@ override_dh_auto_configure:
+ 		-Dpython.purelibdir=/usr/lib/python3/dist-packages
+ 
+ # Upstream's integration tests need a running desktop session; run the
+-# Eduka checks (defaults, schema, Tetum voice mapping) instead.
++# Eduka checks (defaults, schemas, settings window, translations, scripts) instead.
+ override_dh_auto_test:
+ ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+ 	python3 -m pytest -q -p no:cacheprovider --noconftest \
+-		tests/unit_tests/test_eduka_defaults.py
++		tests/unit_tests/test_eduka_defaults.py \
++		tests/unit_tests/test_eduka_settings.py
+ endif
+ 
+ override_dh_python3:
+diff --git a/eduka/90_eduka-orca.gschema.override b/eduka/90_eduka-orca.gschema.override
+index a0562f0..28b43a5 100644
+--- a/eduka/90_eduka-orca.gschema.override
++++ b/eduka/90_eduka-orca.gschema.override
+@@ -5,3 +5,12 @@
+ # applications load their AT-SPI bridge from the start of the session.
+ [org.gnome.desktop.interface]
+ toolkit-accessibility=true
++
++# To change Eduka-Orca's defaults for every user, put keys like these in your
++# own override file (for example 96_school.gschema.override) and run
++# glib-compile-schemas /usr/share/glib-2.0/schemas:
++#
++# [org.edukasaun.EdukaOrca]
++# language='tet'          # en (default), pt, id, tet or system
++# startup-mode='always'   # remember (default), always or never
++# start-delay=3
+diff --git a/eduka/README.Eduka.md b/eduka/README.Eduka.md
+index 768d363..e32f931 100644
+--- a/eduka/README.Eduka.md
++++ b/eduka/README.Eduka.md
+@@ -1,57 +1,86 @@
+ # Eduka-Orca
+ 
+-Eduka-Orca adalah pembaca layar **Orca 50.3** yang disesuaikan untuk
+-**Edukasaun OS** dan desktop **Eduka-Desktop (LXQt)**, dengan fokus pada
+-pengguna dengan **gangguan pendengaran (tunarungu ringan–sedang)** dan
+-tunanetra.
++Eduka-Orca is the **Orca 50.3** screen reader tuned for **Edukasaun OS** and
++the **Eduka-Desktop (LXQt)**, with a focus on people who are **hard of
++hearing** and people who are blind or have low vision.
+ 
+-*Eduka-Orca is the Orca 50.3 screen reader tuned for Edukasaun OS and the
+-Eduka-Desktop (LXQt), with a focus on users who are hard of hearing. An English
+-summary is at the end.*
++It is available in **English** (the default), **Portuguese**, **Indonesian**
++and **Tetum**.
+ 
+-## Apa yang berbeda dari Orca biasa
++## What is different from upstream Orca
+ 
+ | | Orca (upstream) | Eduka-Orca |
+ |---|---|---|
+-| Kecepatan bicara | 50 (dari 0–100) | **30** — lebih pelan, tidak terburu-buru |
+-| Nada suara | 5.0 | **4.5** — sedikit lebih rendah, lebih mudah didengar |
+-| Volume | 10 (maksimum) | 10 (maksimum) |
+-| Teks ucapan di layar (*speech monitor*) | mati | **nyala**, huruf 24 pt, kuning di atas hitam, menempel di bawah layar seperti subtitle, tidak merebut fokus keyboard, kalimat terbaru ditebalkan |
+-| Bahasa Tetum | jatuh ke suara Inggris | **memakai suara Portugis (Eropa)** karena eSpeak NG belum punya suara Tetum |
+-| Desktop LXQt | tidak ada autostart | autostart LXQt, variabel aksesibilitas Qt, menu *Eduka-Orca*, skrip nyala/mati |
+-
+-Semua nilai di atas hanya **bawaan**: pengguna tetap bisa mengubahnya di
+-*Pengaturan Orca* (Orca+Spasi), dan tombol Orca+Shift+D tetap menyalakan/mematikan
+-teks ucapan.
+-
+-## Cara memakai di Eduka-Desktop
+-
+-* **Menu → Aksesibilitas → Eduka-Orca**: menyalakan atau mematikan pembaca layar.
+-  Muncul notifikasi di layar "Eduka-Orca aktif / nonaktif".
+-* Dari terminal: `eduka-orca-toggle`, atau `eduka-orca --replace`.
+-* Pengaturan: klik kanan menu *Eduka-Orca → Pengaturan*, atau `eduka-orca --replace --setup`.
+-* Pilihan nyala/mati diingat: jika aktif, Eduka-Orca otomatis berjalan saat login
+-  (`/etc/xdg/autostart/eduka-orca-autostart.desktop`, khusus LXQt).
+-* Pintasan keyboard **Super+Alt+S**: gabungkan
+-  `/usr/share/eduka-orca/globalkeyshortcuts-eduka-orca.conf` ke
+-  `/etc/xdg/lxqt/globalkeyshortcuts.conf` bawaan Eduka-Desktop.
+-
+-### Menyalakan secara bawaan untuk semua pengguna (untuk pembuat ISO)
+-
+-Buat berkas `/usr/share/glib-2.0/schemas/95_edukasaun-a11y.gschema.override`:
++| Speech rate | 50 (of 0–100) | **30**: slower, words are not rushed |
++| Pitch | 5.0 | **4.5**: slightly lower, easier to hear |
++| Volume | 10 (maximum) | 10 (maximum) |
++| On-screen captions (speech monitor) | off | **on**: 24 pt yellow on black, docked at the bottom of the screen like subtitles, never takes keyboard focus, newest line in bold |
++| Settings | Orca preferences dialog | **Eduka-Orca Settings**, a simple window with one page per topic, plus Orca's own dialog for advanced options |
++| Language | follows the session locale | chosen in Eduka-Orca Settings: **English** (default), Portuguese, Indonesian, Tetum, or the desktop language |
++| Tetum | falls back to an English voice | **European Portuguese voice** (eSpeak NG has no Tetum voice) and Portuguese for Orca messages not yet translated into Tetum |
++| LXQt desktop | no autostart | LXQt autostart with a choice of startup mode, Qt accessibility variables, *Eduka-Orca* menu entry, on/off script |
++
++All the values above are only **defaults**: users can change them in
++Eduka-Orca Settings or in the Orca preferences (Orca+Space), and
++Orca+Shift+D still turns the captions on and off.
++
++## Eduka-Orca Settings
++
++Open it from **Menu → Settings → Eduka-Orca Settings**, from the
++*Settings* action of the *Eduka-Orca* menu entry, or by running
++`eduka-orca-settings` (`--page=speech` opens a specific page).
++
++| Page | What you can change |
++|---|---|
++| Home | Turn the screen reader on or off, speech speed, captions, test the voice; large text and high contrast for the settings window; open the advanced Orca preferences |
++| Language | English, Português, Bahasa Indonesia, Tetun or "Same as the desktop"; switch voices automatically for text in other languages |
++| Speech | Speech on/off, speed (with *Very slow*, *Slow*, *Normal* and *Fast* buttons), pitch, volume, test and reset the voice, punctuation, capital letters, numbers as digits |
++| Captions | Show captions, text size, colour presets (yellow on black, white on black, black on white, black on yellow) or custom colours, with a live preview |
++| Reading and typing | Amount of detail, tutorial messages, reading under the mouse, keyboard layout (desktop/laptop), speaking keys, characters, words and sentences, sounds, braille |
++| Startup | Start at login: *Remember* (default), *Always* or *Never*; wait before starting; welcome message; on/off notifications |
++| About | Version, keyboard shortcuts, reset all settings |
++
++Every change is saved at once; there is no *Apply* button to forget. When the
++screen reader is running, changes are sent to it immediately over D-Bus. Only
++the language and *Read under the mouse* need a restart; the window then offers
++a **Restart now** button.
++
++The window can be used entirely from the keyboard: Tab moves between controls,
++and Ctrl+Page Down / Ctrl+Page Up move between pages. Every control has a
++name and a description for screen readers.
++
++## Using Eduka-Orca on Eduka-Desktop
++
++* **Menu → Accessibility → Eduka-Orca** turns the screen reader on or off.
++  A desktop notification says "Eduka-Orca is on / off".
++* From a terminal: `eduka-orca-toggle` (or `--on`, `--off`, `--restart`,
++  `--status`), or `eduka-orca --replace`.
++* The on/off choice is remembered: with the default *Remember* startup mode,
++  Eduka-Orca starts at login if it was on
++  (`/etc/xdg/autostart/eduka-orca-autostart.desktop`, LXQt only).
++* Keyboard shortcut **Super+Alt+S**: merge
++  `/usr/share/eduka-orca/globalkeyshortcuts-eduka-orca.conf` into the
++  Eduka-Desktop default `/etc/xdg/lxqt/globalkeyshortcuts.conf`.
++
++### Turning it on for every user (for ISO builders)
++
++Create `/usr/share/glib-2.0/schemas/95_edukasaun-a11y.gschema.override`:
+ 
+ ```
+-[org.gnome.desktop.a11y.applications]
+-screen-reader-enabled=true
++[org.edukasaun.EdukaOrca]
++startup-mode='always'
+ ```
+ 
+-lalu jalankan `glib-compile-schemas /usr/share/glib-2.0/schemas`.
++then run `glib-compile-schemas /usr/share/glib-2.0/schemas`.
+ 
+-### Mengubah kecepatan bawaan untuk seluruh sistem
++### Changing the defaults system-wide
+ 
+-Buat berkas override, misalnya `96_edukasaun-orca.gschema.override`:
++Create an override file, for example `96_edukasaun-orca.gschema.override`:
+ 
+ ```
++[org.edukasaun.EdukaOrca]
++language='tet'
++
+ [org.gnome.Orca.Voice]
+ rate=25
+ pitch=4.5
+@@ -60,39 +89,49 @@ pitch=4.5
+ monitor-font-size=28
+ ```
+ 
+-## Berkas yang dipasang paket ini
+-
+-* `/usr/bin/orca` — Orca 50.3 dengan patch Eduka
+-* `/usr/bin/eduka-orca`, `eduka-orca-toggle`, `eduka-orca-autostart`
+-* `/usr/share/applications/eduka-orca.desktop` — entri menu
+-* `/etc/xdg/autostart/eduka-orca-autostart.desktop` — autostart LXQt
+-* `/etc/profile.d/eduka-orca-a11y.sh`, `/usr/lib/environment.d/90-eduka-orca-a11y.conf`
+-  — `QT_ACCESSIBILITY=1` agar aplikasi Qt/LXQt terbaca oleh Orca
+-* `/usr/share/glib-2.0/schemas/90_eduka-orca.gschema.override`
+-
+-## Catatan penting tentang gangguan pendengaran
+-
+-Orca adalah pembaca layar berbasis **suara**. Untuk pengguna yang **tuli total**,
+-suara tidak membantu; yang membantu adalah **teks ucapan di layar** yang sekarang
+-aktif secara bawaan, ditambah pembesar layar dan tema kontras tinggi. Untuk
+-pengguna yang **sulit mendengar**, bicara pelan, nada lebih rendah, dan volume
+-maksimum membuat ucapan lebih mudah diikuti. Uji coba bersama pengguna
+-tunarungu di sekolah sangat disarankan untuk menyetel angka kecepatan yang paling cocok.
+-
+-## Kode sumber
+-
+-Berbasis tag `50.3` dari https://github.com/GNOME/orca (LGPL-2.1-or-later).
+-Semua perubahan Eduka ditandai dengan komentar `Eduka-Orca`, nilai bawaan ada di
+-`src/orca/eduka_defaults.py`, dan diuji di `tests/unit_tests/test_eduka_defaults.py`.
+-
+----
+-
+-## English summary
+-
+-Eduka-Orca = Orca 50.3 + these changes: speech rate 30 (upstream 50), pitch 4.5
+-(upstream 5.0), speech monitor captions on by default (24 pt yellow on black,
+-docked at the bottom, never steals focus, newest line bold, persisted in
+-GSettings key `org.gnome.Orca.Speech monitor-enabled`), Tetum locale uses a
+-European Portuguese voice, plus LXQt autostart, Qt accessibility environment,
+-an "Eduka-Orca" menu entry and an on/off toggle script. Built for Debian 13
+-(trixie), which Edukasaun OS follows.
++`language` is one of `en` (default), `pt`, `id`, `tet` or `system`.
++
++## Languages
++
++* The settings window is translated with gettext (domain `eduka-orca`,
++  files in `eduka/po/`). English is the source language.
++* Orca's own messages come from upstream Orca translations (`po/pt.po`,
++  `po/id.po`). There is no full Tetum translation of Orca yet: `po/tet.po`
++  holds the Eduka strings, and everything else falls back to Portuguese.
++* The voice follows the chosen language. The `eduka-orca` launcher exports
++  `EDUKA_ORCA_LANGUAGE`, which Orca uses even if the matching system locale is
++  not installed. Tetum is spoken with a European Portuguese voice.
++* The Tetum translations were written for Edukasaun OS and should be reviewed
++  by Tetum speakers; corrections to `eduka/po/tet.po` are welcome.
++
++## Files installed by this package
++
++* `/usr/bin/orca`: Orca 50.3 with the Eduka patches
++* `/usr/bin/eduka-orca`, `eduka-orca-settings`, `eduka-orca-toggle`,
++  `eduka-orca-autostart`
++* `/usr/share/eduka-orca/eduka_orca_settings/`: the settings window
++* `/usr/share/applications/eduka-orca.desktop`,
++  `eduka-orca-settings.desktop`: menu entries
++* `/etc/xdg/autostart/eduka-orca-autostart.desktop`: LXQt autostart
++* `/etc/profile.d/eduka-orca-a11y.sh`, `/usr/lib/environment.d/90-eduka-orca-a11y.conf`:
++  `QT_ACCESSIBILITY=1` so that Qt/LXQt applications can be read by Orca
++* `/usr/share/glib-2.0/schemas/org.edukasaun.EdukaOrca.gschema.xml`,
++  `90_eduka-orca.gschema.override`
++* `/usr/share/locale/{id,pt,tet}/LC_MESSAGES/eduka-orca.mo`
++
++## A note about hearing loss
++
++Orca is a **speech**-based screen reader. For people who are **deaf**, speech
++does not help; what helps are the **on-screen captions**, which are on by
++default, together with screen magnification and a high-contrast theme. For
++people who are **hard of hearing**, slow speech, a lower pitch and full volume
++make speech easier to follow. Testing with hard-of-hearing students at school
++is strongly recommended to find the speech rate that suits them best.
++
++## Source code
++
++Based on tag `50.3` of https://github.com/GNOME/orca (LGPL-2.1-or-later).
++Every Eduka change is marked with an `Eduka-Orca` comment. Defaults are in
++`src/orca/eduka_defaults.py`, the settings window is in `eduka/settings/`,
++and the checks are in `tests/unit_tests/test_eduka_defaults.py` and
++`tests/unit_tests/test_eduka_settings.py`.
+diff --git a/eduka/bin/eduka-orca b/eduka/bin/eduka-orca
+index ef68b62..0297c90 100755
+--- a/eduka/bin/eduka-orca
++++ b/eduka/bin/eduka-orca
+@@ -1,8 +1,15 @@
+ #!/bin/sh
+ # Eduka-Orca launcher for Eduka-Desktop (LXQt) on Edukasaun OS.
+ #
+-# Starts Orca with the Eduka defaults (slow speech, on-screen captions). All
+-# arguments are passed through to orca, e.g. "eduka-orca --replace --setup".
++# Starts Orca with the Eduka defaults (slow speech, on-screen captions) in the
++# language chosen in Eduka-Orca Settings (English by default). All arguments
++# are passed through to orca, e.g. "eduka-orca --replace --setup".
++
++EDUKA_SCHEMA=org.edukasaun.EdukaOrca
++
++eduka_get() {
++    gsettings get "$EDUKA_SCHEMA" "$1" 2>/dev/null | tr -d "'"
++}
+ 
+ # Qt applications (the whole LXQt desktop) expose their accessibility tree to
+ # AT-SPI only when this is set. It is also exported session-wide by
+@@ -14,4 +21,48 @@ if command -v gsettings >/dev/null 2>&1; then
+     gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
+ fi
+ 
++# Language of Orca's messages and voice. "system" keeps the session's locale.
++# Orca has no Tetum translation yet, so Tetum falls back to Portuguese messages;
++# its voice is European Portuguese (see src/orca/eduka_defaults.py).
++language=$(eduka_get language)
++case "${language:-en}" in
++    en) export LANGUAGE=en EDUKA_ORCA_LANGUAGE=en ;;
++    pt) export LANGUAGE=pt:pt_BR EDUKA_ORCA_LANGUAGE=pt ;;
++    id) export LANGUAGE=id EDUKA_ORCA_LANGUAGE=id ;;
++    tet) export LANGUAGE=tet:pt:pt_BR EDUKA_ORCA_LANGUAGE=tet ;;
++    *) language=system ;;
++esac
++
++welcome_text() {
++    case "${EDUKA_ORCA_LANGUAGE:-${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-$LANG}}}}" in
++        tet*) echo "Eduka-Orca prontu ona" ;;
++        pt*) echo "O Eduka-Orca está pronto" ;;
++        id*) echo "Eduka-Orca siap" ;;
++        *) echo "Eduka-Orca is ready" ;;
++    esac
++}
++
++# Say (and caption) a short welcome once Orca's D-Bus service is up.
++welcome=$(eduka_get welcome-message)
++case " $* " in
++    *" --setup "* | *" -s "* | *" --help "* | *" -h "* | *" --version "* | *" -v "*)
++        welcome=false ;;
++esac
++if [ "${welcome:-true}" = "true" ] && command -v gdbus >/dev/null 2>&1; then
++    message=$(welcome_text)
++    (
++        tries=0
++        while [ "$tries" -lt 30 ]; do
++            sleep 1
++            tries=$((tries + 1))
++            if gdbus call --session --dest org.gnome.Orca.Service \
++                --object-path /org/gnome/Orca/Service \
++                --method org.gnome.Orca.Service.PresentMessage "$message" \
++                >/dev/null 2>&1; then
++                break
++            fi
++        done
++    ) &
++fi
++
+ exec /usr/bin/orca "$@"
+diff --git a/eduka/bin/eduka-orca-autostart b/eduka/bin/eduka-orca-autostart
+index ae76075..a697997 100755
+--- a/eduka/bin/eduka-orca-autostart
++++ b/eduka/bin/eduka-orca-autostart
+@@ -2,14 +2,42 @@
+ # Session autostart helper for Eduka-Desktop (LXQt).
+ #
+ # lxqt-session does not evaluate the GNOME-only "AutostartCondition" key, so
+-# this helper checks the screen-reader setting itself and only starts
+-# Eduka-Orca when the user (or the Edukasaun OS installer) turned it on.
++# this helper decides itself whether to start Eduka-Orca, following the
++# "Start at login" choice in Eduka-Orca Settings:
++#
++#   remember (default)  start if the screen reader was on in the last session
++#   always              always start
++#   never               never start automatically
++
++EDUKA_SCHEMA=org.edukasaun.EdukaOrca
++
++eduka_get() {
++    gsettings get "$EDUKA_SCHEMA" "$1" 2>/dev/null | tr -d "'"
++}
+ 
+-enabled=$(gsettings get org.gnome.desktop.a11y.applications screen-reader-enabled 2>/dev/null)
+-[ "$enabled" = "true" ] || exit 0
++mode=$(eduka_get startup-mode)
++case "${mode:-remember}" in
++    never)
++        exit 0
++        ;;
++    always)
++        gsettings set org.gnome.desktop.a11y.applications screen-reader-enabled true \
++            2>/dev/null || true
++        ;;
++    *)
++        enabled=$(gsettings get org.gnome.desktop.a11y.applications screen-reader-enabled \
++            2>/dev/null)
++        [ "$enabled" = "true" ] || exit 0
++        ;;
++esac
+ 
+ # Give the panel and the AT-SPI bus a moment to come up, so the first thing
+-# Orca reads is the desktop and not an empty session.
+-sleep "${EDUKA_ORCA_START_DELAY:-2}"
++# Orca reads is the desktop and not an empty session. EDUKA_ORCA_START_DELAY
++# overrides the delay set in Eduka-Orca Settings.
++delay=${EDUKA_ORCA_START_DELAY:-$(eduka_get start-delay)}
++case "$delay" in
++    '' | *[!0-9]*) delay=2 ;;
++esac
++sleep "$delay"
+ 
+ exec /usr/bin/eduka-orca --replace
+diff --git a/eduka/bin/eduka-orca-settings.in b/eduka/bin/eduka-orca-settings.in
+new file mode 100644
+index 0000000..06476cf
+--- /dev/null
++++ b/eduka/bin/eduka-orca-settings.in
+@@ -0,0 +1,13 @@
++#!/usr/bin/python3
++# Eduka-Orca Settings: language, speech speed, captions, startup and other options
++# for the Eduka-Orca screen reader. Pass --page=PAGE to open a specific page
++# (home, language, speech, captions, reading, startup or about).
++
++import sys
++
++sys.path.insert(0, "@pkgdatadir@")
++
++from eduka_orca_settings import app, i18n  # noqa: E402
++
++i18n.set_localedir("@localedir@")
++sys.exit(app.main())
+diff --git a/eduka/bin/eduka-orca-toggle b/eduka/bin/eduka-orca-toggle
+index 8dbfe62..6bb6653 100755
+--- a/eduka/bin/eduka-orca-toggle
++++ b/eduka/bin/eduka-orca-toggle
+@@ -1,55 +1,116 @@
+ #!/bin/sh
+ # Turn Eduka-Orca on or off for the current user (Eduka-Desktop / LXQt).
+ #
+-# Used by the "Eduka-Orca" menu entry and the Super+Alt+S keyboard shortcut.
+-# The choice is remembered in GSettings, so Eduka-Orca starts again (or not)
+-# at the next login.
++# Used by the "Eduka-Orca" menu entry, the Super+Alt+S keyboard shortcut and
++# Eduka-Orca Settings. The choice is remembered in GSettings, so Eduka-Orca
++# starts again (or not) at the next login.
++#
++# Usage: eduka-orca-toggle [--on | --off | --restart | --status | --help]
++#        (no option: turn on if off, off if on)
+ 
+-SCHEMA=org.gnome.desktop.a11y.applications
+-KEY=screen-reader-enabled
++A11Y_SCHEMA=org.gnome.desktop.a11y.applications
++A11Y_KEY=screen-reader-enabled
++EDUKA_SCHEMA=org.edukasaun.EdukaOrca
+ UID_NOW=$(id -u)
+ 
+-say() {
+-    # Visual feedback for users who are hard of hearing.
+-    if command -v notify-send >/dev/null 2>&1; then
+-        notify-send --app-name=Eduka-Orca --icon=orca "Eduka-Orca" "$1" 2>/dev/null || true
+-    fi
++eduka_get() {
++    gsettings get "$EDUKA_SCHEMA" "$1" 2>/dev/null | tr -d "'"
+ }
+ 
++# Language for messages: the one chosen in Eduka-Orca Settings (English by default).
++LANGUAGE_CHOICE=$(eduka_get language)
++case "${LANGUAGE_CHOICE:-en}" in
++    system) MESSAGE_LANGUAGE="${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-$LANG}}}" ;;
++    *) MESSAGE_LANGUAGE="${LANGUAGE_CHOICE:-en}" ;;
++esac
++
+ msg_on() {
+-    case "${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-$LANG}}}" in
+-        tet*) echo "Eduka-Orca ativu" ;;
+-        pt*) echo "Eduka-Orca ativado" ;;
++    case "$MESSAGE_LANGUAGE" in
++        tet*) echo "Eduka-Orca liga ona" ;;
++        pt*) echo "Eduka-Orca ligado" ;;
+         id*) echo "Eduka-Orca aktif" ;;
+         *) echo "Eduka-Orca is on" ;;
+     esac
+ }
+ 
+ msg_off() {
+-    case "${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-$LANG}}}" in
+-        tet*) echo "Eduka-Orca la ativu" ;;
+-        pt*) echo "Eduka-Orca desativado" ;;
++    case "$MESSAGE_LANGUAGE" in
++        tet*) echo "Eduka-Orca mate ona" ;;
++        pt*) echo "Eduka-Orca desligado" ;;
+         id*) echo "Eduka-Orca nonaktif" ;;
+         *) echo "Eduka-Orca is off" ;;
+     esac
+ }
+ 
+-set_key() {
++notify() {
++    # Visual feedback for users who are hard of hearing.
++    [ "$(eduka_get show-notifications)" = "false" ] && return 0
++    if command -v notify-send >/dev/null 2>&1; then
++        notify-send --app-name=Eduka-Orca --icon=orca "Eduka-Orca" "$1" 2>/dev/null || true
++    fi
++}
++
++remember() {
+     if command -v gsettings >/dev/null 2>&1; then
+-        gsettings set "$SCHEMA" "$KEY" "$1" 2>/dev/null || true
++        gsettings set "$A11Y_SCHEMA" "$A11Y_KEY" "$1" 2>/dev/null || true
+     fi
+ }
+ 
+-if pgrep -u "$UID_NOW" -x orca >/dev/null 2>&1; then
+-    set_key false
+-    pkill -TERM -u "$UID_NOW" -x orca
+-    say "$(msg_off)"
+-else
+-    set_key true
++is_running() {
++    pgrep -u "$UID_NOW" -x orca >/dev/null 2>&1
++}
++
++start() {
+     if command -v setsid >/dev/null 2>&1; then
+         setsid /usr/bin/eduka-orca --replace >/dev/null 2>&1 &
+     else
+         nohup /usr/bin/eduka-orca --replace >/dev/null 2>&1 &
+     fi
+-    say "$(msg_on)"
+-fi
++}
++
++stop() {
++    pkill -TERM -u "$UID_NOW" -x orca 2>/dev/null
++    # Wait up to 5 seconds for Orca to exit, so a restart does not race it.
++    tries=0
++    while is_running && [ "$tries" -lt 25 ]; do
++        sleep 0.2
++        tries=$((tries + 1))
++    done
++}
++
++turn_on() {
++    remember true
++    is_running || start
++    notify "$(msg_on)"
++}
++
++turn_off() {
++    remember false
++    stop
++    notify "$(msg_off)"
++}
++
++case "${1:-}" in
++    --on) turn_on ;;
++    --off) turn_off ;;
++    --restart)
++        remember true
++        stop
++        start
++        notify "$(msg_on)"
++        ;;
++    --status)
++        if is_running; then echo on; else echo off; fi
++        ;;
++    -h | --help)
++        echo "Usage: eduka-orca-toggle [--on | --off | --restart | --status]"
++        echo "Without an option, turns the screen reader on if it is off, and off if it is on."
++        ;;
++    '')
++        if is_running; then turn_off; else turn_on; fi
++        ;;
++    *)
++        echo "eduka-orca-toggle: unknown option: $1 (try --help)" >&2
++        exit 2
++        ;;
++esac
+diff --git a/eduka/eduka-orca.1 b/eduka/eduka-orca.1
+index 6bc3371..def105f 100644
+--- a/eduka/eduka-orca.1
++++ b/eduka/eduka-orca.1
+@@ -1,11 +1,15 @@
+-.TH EDUKA-ORCA 1 "September 2026" "Eduka-Orca 50.3" "Edukasaun OS"
++.TH EDUKA-ORCA 1 "October 2026" "Eduka-Orca 50.3+eduka2" "Edukasaun OS"
+ .SH NAME
+-eduka-orca, eduka-orca-toggle, eduka-orca-autostart \- Orca screen reader for Eduka-Desktop
++eduka-orca, eduka-orca-settings, eduka-orca-toggle, eduka-orca-autostart \- Orca screen reader for Eduka-Desktop
+ .SH SYNOPSIS
+ .B eduka-orca
+ .RI [ orca-options ]
+ .br
++.B eduka-orca-settings
++.RB [ \-\-page = \fIPAGE\fR ]
++.br
+ .B eduka-orca-toggle
++.RB [ \-\-on | \-\-off | \-\-restart | \-\-status ]
+ .br
+ .B eduka-orca-autostart
+ .SH DESCRIPTION
+@@ -13,27 +17,63 @@ Eduka-Orca is the Orca screen reader as packaged for Edukasaun OS and the
+ Eduka-Desktop (LXQt). It speaks more slowly (rate 30 instead of 50) with a
+ slightly lower voice (pitch 4.5 instead of 5.0), and shows everything it speaks
+ as large captions at the bottom of the screen, to help users who are hard of
+-hearing.
++hearing. It is available in English (the default), Portuguese, Indonesian and
++Tetum.
+ .PP
+ .B eduka-orca
+-starts Orca with Qt accessibility enabled. All options are passed to
++starts Orca with Qt accessibility enabled, in the language chosen in
++Eduka-Orca Settings, and says a short welcome message once it is ready. All
++options are passed to
+ .BR orca (1),
+ for example
+ .B \-\-replace
+ or
+ .BR \-\-setup .
+ .PP
++.B eduka-orca-settings
++opens the Eduka-Orca Settings window: turn the screen reader on or off, choose
++the language, the speech speed, pitch and volume, the captions (size and
++colours), what is spoken while reading and typing, and when the screen reader
++starts. Changes are saved at once and applied to the running screen reader.
++.I PAGE
++is one of home, language, speech, captions, reading, startup or about.
++Ctrl+Page Down and Ctrl+Page Up move between pages.
++.PP
+ .B eduka-orca-toggle
+-turns the screen reader on or off, remembers the choice in the GSettings key
++turns the screen reader on or off (or, with an option, only on, only off,
++restarts it, or prints
++.I on
++or
++.IR off ),
++remembers the choice in the GSettings key
+ .I org.gnome.desktop.a11y.applications screen-reader-enabled
+-and shows a desktop notification.
++and shows a desktop notification unless notifications are turned off in
++Eduka-Orca Settings.
+ .PP
+ .B eduka-orca-autostart
+-is run by the LXQt session at login and starts Eduka-Orca only when that key is
+-.IR true .
+-The delay before starting can be changed with the environment variable
++is run by the LXQt session at login. It follows the
++.I Start at login
++choice in Eduka-Orca Settings:
++.I remember
++(start if the screen reader was on in the last session),
++.I always
++or
++.IR never .
++The delay before starting is set in Eduka-Orca Settings and can be overridden
++with the environment variable
+ .BR EDUKA_ORCA_START_DELAY
+-(seconds, default 2).
++(seconds).
++.SH SETTINGS
++Eduka-Orca's own settings are stored in the GSettings schema
++.IR org.edukasaun.EdukaOrca :
++.BR language " (en, pt, id, tet or system),"
++.BR startup-mode ", " start-delay ", " welcome-message ", " show-notifications ,
++.BR large-text " and " high-contrast .
++Orca's settings are stored under
++.IR /org/gnome/orca/ .
++Administrators can change the defaults for all users with a
++.I *.gschema.override
++file.
+ .SH FILES
+ .TP
+ .I /usr/share/doc/eduka-orca/README.Eduka.md
+@@ -42,4 +82,5 @@ Description of all Eduka changes and how to change the defaults system-wide.
+ .I /usr/share/eduka-orca/globalkeyshortcuts-eduka-orca.conf
+ Super+Alt+S shortcut for lxqt-globalkeyshortcuts.
+ .SH SEE ALSO
+-.BR orca (1)
++.BR orca (1),
++.BR gsettings (1)
+diff --git a/eduka/meson.build b/eduka/meson.build
+index 1b4639b..d670ae5 100644
+--- a/eduka/meson.build
++++ b/eduka/meson.build
+@@ -1,5 +1,7 @@
+ # Eduka-Orca: integration with Eduka-Desktop (LXQt) on Edukasaun OS.
+ 
++pkgdatadir = get_option('prefix') / get_option('datadir') / 'eduka-orca'
++
+ install_data(
+   'bin/eduka-orca',
+   'bin/eduka-orca-toggle',
+@@ -8,8 +10,35 @@ install_data(
+   install_mode: 'rwxr-xr-x',
+ )
+ 
++# Eduka-Orca Settings (language, speech speed, captions, startup, ...).
++settings_conf = configuration_data()
++settings_conf.set('pkgdatadir', pkgdatadir)
++settings_conf.set('localedir', get_option('prefix') / get_option('localedir'))
++configure_file(
++  input: 'bin/eduka-orca-settings.in',
++  output: 'eduka-orca-settings',
++  configuration: settings_conf,
++  install: true,
++  install_dir: get_option('bindir'),
++  install_mode: 'rwxr-xr-x',
++)
++
++install_subdir(
++  'settings/eduka_orca_settings',
++  install_dir: pkgdatadir,
++  exclude_directories: ['__pycache__'],
++)
++
++install_data(
++  'org.edukasaun.EdukaOrca.gschema.xml',
++  install_dir: get_option('datadir') / 'glib-2.0' / 'schemas',
++)
++
++subdir('po')
++
+ install_data(
+   'xdg/eduka-orca.desktop',
++  'xdg/eduka-orca-settings.desktop',
+   install_dir: get_option('datadir') / 'applications',
+ )
+ 
+@@ -44,13 +73,10 @@ install_data(
+ )
+ 
+ install_man('eduka-orca.1')
+-install_symlink(
+-  'eduka-orca-toggle.1',
+-  pointing_to: 'eduka-orca.1',
+-  install_dir: get_option('mandir') / 'man1',
+-)
+-install_symlink(
+-  'eduka-orca-autostart.1',
+-  pointing_to: 'eduka-orca.1',
+-  install_dir: get_option('mandir') / 'man1',
+-)
++foreach page : ['eduka-orca-toggle.1', 'eduka-orca-autostart.1', 'eduka-orca-settings.1']
++  install_symlink(
++    page,
++    pointing_to: 'eduka-orca.1',
++    install_dir: get_option('mandir') / 'man1',
++  )
++endforeach
+diff --git a/eduka/org.edukasaun.EdukaOrca.gschema.xml b/eduka/org.edukasaun.EdukaOrca.gschema.xml
+new file mode 100644
+index 0000000..0f3a164
+--- /dev/null
++++ b/eduka/org.edukasaun.EdukaOrca.gschema.xml
+@@ -0,0 +1,63 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++  Eduka-Orca settings that are not part of Orca itself.
++  Edited with eduka-orca-settings; read by eduka-orca, eduka-orca-toggle and
++  eduka-orca-autostart. Administrators can change the defaults system-wide with
++  a *.gschema.override file (see README.Eduka.md).
++-->
++<schemalist gettext-domain="eduka-orca">
++  <enum id="org.edukasaun.EdukaOrca.Language">
++    <value nick="en" value="0"/>
++    <value nick="pt" value="1"/>
++    <value nick="id" value="2"/>
++    <value nick="tet" value="3"/>
++    <value nick="system" value="4"/>
++  </enum>
++
++  <enum id="org.edukasaun.EdukaOrca.StartupMode">
++    <value nick="remember" value="0"/>
++    <value nick="always" value="1"/>
++    <value nick="never" value="2"/>
++  </enum>
++
++  <schema id="org.edukasaun.EdukaOrca" path="/org/edukasaun/eduka-orca/">
++    <key name="language" enum="org.edukasaun.EdukaOrca.Language">
++      <default>'en'</default>
++      <summary>Language of the screen reader and of Eduka-Orca Settings</summary>
++      <description>
++        en (English), pt (Portuguese), id (Indonesian), tet (Tetum) or system
++        (follow the language of the desktop session). Tetum is spoken with a
++        European Portuguese voice because eSpeak NG has no Tetum voice.
++      </description>
++    </key>
++    <key name="startup-mode" enum="org.edukasaun.EdukaOrca.StartupMode">
++      <default>'remember'</default>
++      <summary>When to start Eduka-Orca at login</summary>
++      <description>
++        remember: start if the screen reader was on at the end of the last
++        session; always: always start; never: never start automatically.
++      </description>
++    </key>
++    <key name="start-delay" type="i">
++      <range min="0" max="30"/>
++      <default>2</default>
++      <summary>Seconds to wait after login before starting</summary>
++    </key>
++    <key name="show-notifications" type="b">
++      <default>true</default>
++      <summary>Show a desktop notification when the screen reader is turned on or off</summary>
++    </key>
++    <key name="welcome-message" type="b">
++      <default>true</default>
++      <summary>Speak and show a welcome message when the screen reader starts</summary>
++    </key>
++    <key name="large-text" type="b">
++      <default>false</default>
++      <summary>Use larger text in Eduka-Orca Settings</summary>
++    </key>
++    <key name="high-contrast" type="b">
++      <default>false</default>
++      <summary>Use high-contrast colours in Eduka-Orca Settings</summary>
++    </key>
++  </schema>
++</schemalist>
+diff --git a/eduka/po/LINGUAS b/eduka/po/LINGUAS
+new file mode 100644
+index 0000000..e1a86a0
+--- /dev/null
++++ b/eduka/po/LINGUAS
+@@ -0,0 +1,3 @@
++id
++pt
++tet
+diff --git a/eduka/po/POTFILES.in b/eduka/po/POTFILES.in
+new file mode 100644
+index 0000000..db298e8
+--- /dev/null
++++ b/eduka/po/POTFILES.in
+@@ -0,0 +1 @@
++eduka/settings/eduka_orca_settings/app.py
+diff --git a/eduka/po/id.po b/eduka/po/id.po
+new file mode 100644
+index 0000000..9412ddb
+--- /dev/null
++++ b/eduka/po/id.po
+@@ -0,0 +1,460 @@
++# Indonesian translation of Eduka-Orca Settings.
++# Copyright (C) 2026 Edukasaun OS
++# This file is distributed under the same license as the eduka-orca package.
++#
++msgid ""
++msgstr ""
++"Project-Id-Version: eduka-orca 50.3+eduka2\n"
++"Report-Msgid-Bugs-To: https://github.com/hugomonizdorego/Eduka-Orca/issues\n"
++"PO-Revision-Date: 2026-10-01 00:00+0900\n"
++"Last-Translator: Edukasaun OS <hugomonizdorego@angelinojoana.com>\n"
++"Language-Team: Indonesian\n"
++"Language: id\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Plural-Forms: nplurals=1; plural=0;\n"
++
++msgid "Home"
++msgstr "Beranda"
++
++msgid "Language"
++msgstr "Bahasa"
++
++msgid "Speech"
++msgstr "Ucapan"
++
++msgid "Captions"
++msgstr "Teks di layar"
++
++msgid "Reading and typing"
++msgstr "Membaca dan mengetik"
++
++msgid "Startup"
++msgstr "Saat mulai"
++
++msgid "About"
++msgstr "Tentang"
++
++msgid "Very slow"
++msgstr "Sangat pelan"
++
++msgid "Slow (recommended)"
++msgstr "Pelan (disarankan)"
++
++msgid "Normal"
++msgstr "Normal"
++
++msgid "Fast"
++msgstr "Cepat"
++
++msgid "Yellow on black"
++msgstr "Kuning di atas hitam"
++
++msgid "White on black"
++msgstr "Putih di atas hitam"
++
++msgid "Black on white"
++msgstr "Hitam di atas putih"
++
++msgid "Black on yellow"
++msgstr "Hitam di atas kuning"
++
++msgid "None"
++msgstr "Tidak ada"
++
++msgid "Some"
++msgstr "Sebagian"
++
++msgid "Most"
++msgstr "Sebagian besar"
++
++msgid "All"
++msgstr "Semua"
++
++msgid "Do not announce"
++msgstr "Jangan diumumkan"
++
++msgid "Play a sound"
++msgstr "Putar suara"
++
++msgid "Say “capital”"
++msgstr "Ucapkan “kapital”"
++
++msgid "Brief"
++msgstr "Singkat"
++
++msgid "Detailed"
++msgstr "Lengkap"
++
++msgid "Desktop (Orca key: Insert)"
++msgstr "Desktop (tombol Orca: Insert)"
++
++msgid "Laptop (Orca key: Caps Lock)"
++msgstr "Laptop (tombol Orca: Caps Lock)"
++
++msgid "Remember"
++msgstr "Ingat"
++
++msgid "Start at login if it was on when you logged out."
++msgstr "Mulai saat masuk jika masih aktif ketika Anda keluar."
++
++msgid "Always"
++msgstr "Selalu"
++
++msgid "Always start the screen reader when you log in."
++msgstr "Selalu mulai pembaca layar saat Anda masuk."
++
++msgid "Never"
++msgstr "Tidak pernah"
++
++msgid "Never start automatically. Use the menu or Super+Alt+S."
++msgstr "Jangan pernah mulai otomatis. Gunakan menu atau Super+Alt+S."
++
++msgid "Turn the screen reader on or off"
++msgstr "Nyalakan atau matikan pembaca layar"
++
++msgid "Open Orca preferences"
++msgstr "Buka pengaturan Orca"
++
++msgid "Learn mode: explains what each key does"
++msgstr "Mode belajar: menjelaskan fungsi setiap tombol"
++
++msgid "Turn speech on or off"
++msgstr "Nyalakan atau matikan ucapan"
++
++msgid "Where am I"
++msgstr "Di mana saya"
++
++msgid "Show or hide captions"
++msgstr "Tampilkan atau sembunyikan teks di layar"
++
++msgid "Eduka-Orca Settings"
++msgstr "Pengaturan Eduka-Orca"
++
++msgid "Screen reader with slow speech and captions"
++msgstr "Pembaca layar dengan ucapan pelan dan teks di layar"
++
++msgid "Restart now"
++msgstr "Mulai ulang sekarang"
++
++msgid "Some settings could not be found, so changes will not be saved. Please reinstall the eduka-orca package."
++msgstr "Beberapa pengaturan tidak ditemukan, jadi perubahan tidak akan disimpan. Silakan pasang ulang paket eduka-orca."
++
++msgid "Settings pages"
++msgstr "Halaman pengaturan"
++
++msgid "Screen reader is on"
++msgstr "Pembaca layar aktif"
++
++msgid "Screen reader is off"
++msgstr "Pembaca layar nonaktif"
++
++msgid "Welcome"
++msgstr "Selamat datang"
++
++msgid "The screen reader is on"
++msgstr "Pembaca layar sedang aktif"
++
++msgid "Eduka-Orca is reading the screen aloud and showing captions."
++msgstr "Eduka-Orca sedang membacakan layar dan menampilkan teks."
++
++msgid "Turn off"
++msgstr "Matikan"
++
++msgid "The screen reader is off"
++msgstr "Pembaca layar sedang nonaktif"
++
++msgid "Turn it on to hear and read what is on the screen."
++msgstr "Nyalakan untuk mendengar dan membaca isi layar."
++
++msgid "Turn on"
++msgstr "Nyalakan"
++
++msgid "Quick settings"
++msgstr "Pengaturan cepat"
++
++msgid "Speech speed"
++msgstr "Kecepatan ucapan"
++
++msgid "Lower is slower. Eduka-Orca speaks slowly by default."
++msgstr "Makin kecil makin pelan. Eduka-Orca bawaannya berbicara pelan."
++
++msgid "Show captions"
++msgstr "Tampilkan teks di layar"
++
++msgid "Show everything the screen reader says as large text at the bottom of the screen."
++msgstr "Tampilkan semua yang diucapkan pembaca layar sebagai teks besar di bagian bawah layar."
++
++msgid "Test voice"
++msgstr "Uji suara"
++
++msgid "Hear the current voice and speed."
++msgstr "Dengarkan suara dan kecepatan saat ini."
++
++msgid "Settings window"
++msgstr "Jendela pengaturan"
++
++msgid "Large text"
++msgstr "Teks besar"
++
++msgid "Use bigger text in this window."
++msgstr "Gunakan teks lebih besar di jendela ini."
++
++msgid "High contrast"
++msgstr "Kontras tinggi"
++
++msgid "Use yellow text on black in this window."
++msgstr "Gunakan teks kuning di atas hitam di jendela ini."
++
++msgid "More options"
++msgstr "Opsi lainnya"
++
++msgid "Open"
++msgstr "Buka"
++
++msgid "Advanced Orca preferences"
++msgstr "Pengaturan lanjutan Orca"
++
++msgid "All of Orca's options, including braille, key bindings and pronunciation."
++msgstr "Semua opsi Orca, termasuk braille, pintasan tombol, dan pelafalan."
++
++msgid "Choose the language of the screen reader and of this window. English is the default."
++msgstr "Pilih bahasa pembaca layar dan jendela ini. Bahasa Inggris adalah bawaan."
++
++msgid "Same as the desktop"
++msgstr "Sama dengan desktop"
++
++msgid "Tetun is spoken with a Portuguese voice, because there is no Tetun voice yet. Orca messages that are not translated into Tetun are shown in Portuguese."
++msgstr "Bahasa Tetun diucapkan dengan suara Portugis, karena belum ada suara Tetun. Pesan Orca yang belum diterjemahkan ke Tetun ditampilkan dalam bahasa Portugis."
++
++msgid "Voice"
++msgstr "Suara"
++
++msgid "Switch voice for other languages"
++msgstr "Ganti suara untuk bahasa lain"
++
++msgid "When a web page or document says it is in another language, use a voice for that language."
++msgstr "Jika halaman web atau dokumen menyatakan bahasa lain, gunakan suara untuk bahasa itu."
++
++msgid "How the screen reader sounds. Changes are used at once."
++msgstr "Bagaimana suara pembaca layar. Perubahan langsung dipakai."
++
++msgid "Turn spoken output on or off."
++msgstr "Nyalakan atau matikan keluaran suara."
++
++msgid "Speed"
++msgstr "Kecepatan"
++
++msgid "Lower is slower. 30 is the Eduka-Orca default."
++msgstr "Makin kecil makin pelan. 30 adalah bawaan Eduka-Orca."
++
++msgid "Pitch"
++msgstr "Nada"
++
++msgid "A lower voice is often easier to hear."
++msgstr "Suara yang lebih rendah biasanya lebih mudah didengar."
++
++msgid "Volume"
++msgstr "Volume"
++
++msgid "Reset voice"
++msgstr "Atur ulang suara"
++
++msgid "Try it"
++msgstr "Coba"
++
++msgid "Hear a sample sentence, or go back to the Eduka-Orca voice."
++msgstr "Dengarkan contoh kalimat, atau kembali ke suara Eduka-Orca."
++
++msgid "What to say"
++msgstr "Apa yang diucapkan"
++
++msgid "Punctuation"
++msgstr "Tanda baca"
++
++msgid "How many punctuation marks are spoken."
++msgstr "Berapa banyak tanda baca yang diucapkan."
++
++msgid "Capital letters"
++msgstr "Huruf kapital"
++
++msgid "How capital letters are announced."
++msgstr "Bagaimana huruf kapital diumumkan."
++
++msgid "Numbers as digits"
++msgstr "Angka sebagai digit"
++
++msgid "Say “1 2 3” instead of “one hundred twenty-three”."
++msgstr "Ucapkan “1 2 3”, bukan “seratus dua puluh tiga”."
++
++msgid "Captions show everything the screen reader says as text, like subtitles on television. They help people who are hard of hearing."
++msgstr "Teks di layar menampilkan semua yang diucapkan pembaca layar, seperti subtitle di televisi. Ini membantu orang yang sulit mendengar."
++
++msgid "The caption window never takes the keyboard focus."
++msgstr "Jendela teks tidak pernah mengambil fokus keyboard."
++
++msgid "This is how captions will look."
++msgstr "Beginilah tampilan teks di layar."
++
++msgid "Appearance"
++msgstr "Tampilan"
++
++msgid "Text size"
++msgstr "Ukuran teks"
++
++msgid "Size of the caption text, in points."
++msgstr "Ukuran teks, dalam poin."
++
++msgid "Colours"
++msgstr "Warna"
++
++msgid "Choose a colour combination that is easy to read."
++msgstr "Pilih kombinasi warna yang mudah dibaca."
++
++msgid "Text colour"
++msgstr "Warna teks"
++
++msgid "Background colour"
++msgstr "Warna latar"
++
++msgid "Preview"
++msgstr "Pratinjau"
++
++msgid "How much the screen reader says, and what it says while you type."
++msgstr "Seberapa banyak yang diucapkan pembaca layar, dan apa yang diucapkan saat Anda mengetik."
++
++msgid "Reading"
++msgstr "Membaca"
++
++msgid "Amount of detail"
++msgstr "Tingkat detail"
++
++msgid "Brief says less about each item; detailed says more."
++msgstr "Singkat mengucapkan lebih sedikit tentang setiap item; lengkap mengucapkan lebih banyak."
++
++msgid "Tutorial messages"
++msgstr "Pesan panduan"
++
++msgid "Explain how to use buttons, lists and other items."
++msgstr "Jelaskan cara memakai tombol, daftar, dan item lain."
++
++msgid "Read under the mouse"
++msgstr "Baca di bawah mouse"
++
++msgid "Read what is under the mouse pointer. Used after the next restart."
++msgstr "Baca apa yang ada di bawah penunjuk mouse. Berlaku setelah mulai ulang."
++
++msgid "Keyboard"
++msgstr "Keyboard"
++
++msgid "Keyboard layout"
++msgstr "Tata letak keyboard"
++
++msgid "Choose Laptop if your keyboard has no Insert key."
++msgstr "Pilih Laptop jika keyboard Anda tidak punya tombol Insert."
++
++msgid "Speak keys"
++msgstr "Ucapkan tombol"
++
++msgid "Say each key as you press it."
++msgstr "Ucapkan setiap tombol saat ditekan."
++
++msgid "Speak characters"
++msgstr "Ucapkan karakter"
++
++msgid "Say each character as it is typed."
++msgstr "Ucapkan setiap karakter saat diketik."
++
++msgid "Speak words"
++msgstr "Ucapkan kata"
++
++msgid "Say each word after you type it."
++msgstr "Ucapkan setiap kata setelah diketik."
++
++msgid "Speak sentences"
++msgstr "Ucapkan kalimat"
++
++msgid "Say each sentence after you type it."
++msgstr "Ucapkan setiap kalimat setelah diketik."
++
++msgid "Other output"
++msgstr "Keluaran lain"
++
++msgid "Sounds"
++msgstr "Suara efek"
++
++msgid "Play short sounds, for example for progress bars."
++msgstr "Putar suara pendek, misalnya untuk bilah kemajuan."
++
++msgid "Braille"
++msgstr "Braille"
++
++msgid "Use a braille display if one is connected."
++msgstr "Gunakan layar braille jika tersambung."
++
++msgid "Choose when the screen reader starts and how it tells you it is on."
++msgstr "Pilih kapan pembaca layar mulai dan bagaimana ia memberi tahu bahwa ia aktif."
++
++msgid "Start at login"
++msgstr "Mulai saat masuk"
++
++msgid "When starting"
++msgstr "Saat mulai"
++
++msgid "Wait before starting"
++msgstr "Tunggu sebelum mulai"
++
++msgid "Seconds to wait after login, so the desktop is ready first."
++msgstr "Detik menunggu setelah masuk, agar desktop siap lebih dulu."
++
++msgid "Welcome message"
++msgstr "Pesan sambutan"
++
++msgid "Say and show “Eduka-Orca is ready” when it starts."
++msgstr "Ucapkan dan tampilkan “Eduka-Orca siap” saat mulai."
++
++msgid "Notifications"
++msgstr "Notifikasi"
++
++msgid "Show a message on the screen when the screen reader is turned on or off."
++msgstr "Tampilkan pesan di layar saat pembaca layar dinyalakan atau dimatikan."
++
++msgid "The Orca screen reader for Edukasaun OS, with slow speech and on-screen captions."
++msgstr "Pembaca layar Orca untuk Edukasaun OS, dengan ucapan pelan dan teks di layar."
++
++msgid "Keyboard shortcuts"
++msgstr "Pintasan keyboard"
++
++msgid "Reset"
++msgstr "Atur ulang"
++
++msgid "Reset all settings"
++msgstr "Atur ulang semua pengaturan"
++
++msgid "Go back to the Eduka-Orca defaults: English, slow speech and captions."
++msgstr "Kembali ke bawaan Eduka-Orca: bahasa Inggris, ucapan pelan, dan teks di layar."
++
++msgid "Eduka-Orca is free software, licensed under the GNU LGPL 2.1 or later. It is based on Orca by the GNOME Project."
++msgstr "Eduka-Orca adalah perangkat lunak bebas berlisensi GNU LGPL 2.1 atau lebih baru. Berbasis Orca dari Proyek GNOME."
++
++msgid "Restart the screen reader to use the new settings."
++msgstr "Mulai ulang pembaca layar untuk memakai pengaturan baru."
++
++msgid "The screen reader could not be started."
++msgstr "Pembaca layar tidak dapat dimulai."
++
++msgid "Hello! This is how Eduka-Orca sounds at this speed."
++msgstr "Halo! Beginilah suara Eduka-Orca pada kecepatan ini."
++
++msgid "No speech is available. Please install speech-dispatcher."
++msgstr "Suara tidak tersedia. Silakan pasang speech-dispatcher."
++
++msgid "Reset all settings?"
++msgstr "Atur ulang semua pengaturan?"
++
++msgid "All Eduka-Orca settings will go back to their defaults."
++msgstr "Semua pengaturan Eduka-Orca akan kembali ke bawaan."
++
++msgid "Cancel"
++msgstr "Batal"
+diff --git a/eduka/po/meson.build b/eduka/po/meson.build
+new file mode 100644
+index 0000000..23c4777
+--- /dev/null
++++ b/eduka/po/meson.build
+@@ -0,0 +1,2 @@
++# Translations of Eduka-Orca Settings (gettext domain "eduka-orca").
++i18n.gettext('eduka-orca', preset: 'glib')
+diff --git a/eduka/po/pt.po b/eduka/po/pt.po
+new file mode 100644
+index 0000000..d5d6ecb
+--- /dev/null
++++ b/eduka/po/pt.po
+@@ -0,0 +1,460 @@
++# Portuguese translation of Eduka-Orca Settings.
++# Copyright (C) 2026 Edukasaun OS
++# This file is distributed under the same license as the eduka-orca package.
++#
++msgid ""
++msgstr ""
++"Project-Id-Version: eduka-orca 50.3+eduka2\n"
++"Report-Msgid-Bugs-To: https://github.com/hugomonizdorego/Eduka-Orca/issues\n"
++"PO-Revision-Date: 2026-10-01 00:00+0900\n"
++"Last-Translator: Edukasaun OS <hugomonizdorego@angelinojoana.com>\n"
++"Language-Team: Portuguese\n"
++"Language: pt\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Plural-Forms: nplurals=2; plural=(n != 1);\n"
++
++msgid "Home"
++msgstr "Início"
++
++msgid "Language"
++msgstr "Língua"
++
++msgid "Speech"
++msgstr "Fala"
++
++msgid "Captions"
++msgstr "Legendas"
++
++msgid "Reading and typing"
++msgstr "Leitura e escrita"
++
++msgid "Startup"
++msgstr "Arranque"
++
++msgid "About"
++msgstr "Acerca"
++
++msgid "Very slow"
++msgstr "Muito lenta"
++
++msgid "Slow (recommended)"
++msgstr "Lenta (recomendada)"
++
++msgid "Normal"
++msgstr "Normal"
++
++msgid "Fast"
++msgstr "Rápida"
++
++msgid "Yellow on black"
++msgstr "Amarelo sobre preto"
++
++msgid "White on black"
++msgstr "Branco sobre preto"
++
++msgid "Black on white"
++msgstr "Preto sobre branco"
++
++msgid "Black on yellow"
++msgstr "Preto sobre amarelo"
++
++msgid "None"
++msgstr "Nenhuma"
++
++msgid "Some"
++msgstr "Alguma"
++
++msgid "Most"
++msgstr "A maioria"
++
++msgid "All"
++msgstr "Toda"
++
++msgid "Do not announce"
++msgstr "Não anunciar"
++
++msgid "Play a sound"
++msgstr "Tocar um som"
++
++msgid "Say “capital”"
++msgstr "Dizer “maiúscula”"
++
++msgid "Brief"
++msgstr "Breve"
++
++msgid "Detailed"
++msgstr "Detalhada"
++
++msgid "Desktop (Orca key: Insert)"
++msgstr "Computador de secretária (tecla Orca: Insert)"
++
++msgid "Laptop (Orca key: Caps Lock)"
++msgstr "Portátil (tecla Orca: Caps Lock)"
++
++msgid "Remember"
++msgstr "Lembrar"
++
++msgid "Start at login if it was on when you logged out."
++msgstr "Iniciar ao entrar se estava ligado quando saiu."
++
++msgid "Always"
++msgstr "Sempre"
++
++msgid "Always start the screen reader when you log in."
++msgstr "Iniciar sempre o leitor de ecrã ao entrar."
++
++msgid "Never"
++msgstr "Nunca"
++
++msgid "Never start automatically. Use the menu or Super+Alt+S."
++msgstr "Nunca iniciar automaticamente. Use o menu ou Super+Alt+S."
++
++msgid "Turn the screen reader on or off"
++msgstr "Ligar ou desligar o leitor de ecrã"
++
++msgid "Open Orca preferences"
++msgstr "Abrir as preferências do Orca"
++
++msgid "Learn mode: explains what each key does"
++msgstr "Modo de aprendizagem: explica o que faz cada tecla"
++
++msgid "Turn speech on or off"
++msgstr "Ligar ou desligar a fala"
++
++msgid "Where am I"
++msgstr "Onde estou"
++
++msgid "Show or hide captions"
++msgstr "Mostrar ou ocultar as legendas"
++
++msgid "Eduka-Orca Settings"
++msgstr "Definições do Eduka-Orca"
++
++msgid "Screen reader with slow speech and captions"
++msgstr "Leitor de ecrã com fala lenta e legendas"
++
++msgid "Restart now"
++msgstr "Reiniciar agora"
++
++msgid "Some settings could not be found, so changes will not be saved. Please reinstall the eduka-orca package."
++msgstr "Não foi possível encontrar algumas definições, por isso as alterações não serão guardadas. Reinstale o pacote eduka-orca."
++
++msgid "Settings pages"
++msgstr "Páginas de definições"
++
++msgid "Screen reader is on"
++msgstr "Leitor de ecrã ligado"
++
++msgid "Screen reader is off"
++msgstr "Leitor de ecrã desligado"
++
++msgid "Welcome"
++msgstr "Bem-vindo"
++
++msgid "The screen reader is on"
++msgstr "O leitor de ecrã está ligado"
++
++msgid "Eduka-Orca is reading the screen aloud and showing captions."
++msgstr "O Eduka-Orca está a ler o ecrã em voz alta e a mostrar legendas."
++
++msgid "Turn off"
++msgstr "Desligar"
++
++msgid "The screen reader is off"
++msgstr "O leitor de ecrã está desligado"
++
++msgid "Turn it on to hear and read what is on the screen."
++msgstr "Ligue-o para ouvir e ler o que está no ecrã."
++
++msgid "Turn on"
++msgstr "Ligar"
++
++msgid "Quick settings"
++msgstr "Definições rápidas"
++
++msgid "Speech speed"
++msgstr "Velocidade da fala"
++
++msgid "Lower is slower. Eduka-Orca speaks slowly by default."
++msgstr "Mais baixo é mais lento. O Eduka-Orca fala devagar por omissão."
++
++msgid "Show captions"
++msgstr "Mostrar legendas"
++
++msgid "Show everything the screen reader says as large text at the bottom of the screen."
++msgstr "Mostrar tudo o que o leitor de ecrã diz em texto grande no fundo do ecrã."
++
++msgid "Test voice"
++msgstr "Testar a voz"
++
++msgid "Hear the current voice and speed."
++msgstr "Ouvir a voz e a velocidade atuais."
++
++msgid "Settings window"
++msgstr "Janela de definições"
++
++msgid "Large text"
++msgstr "Texto grande"
++
++msgid "Use bigger text in this window."
++msgstr "Usar texto maior nesta janela."
++
++msgid "High contrast"
++msgstr "Alto contraste"
++
++msgid "Use yellow text on black in this window."
++msgstr "Usar texto amarelo sobre preto nesta janela."
++
++msgid "More options"
++msgstr "Mais opções"
++
++msgid "Open"
++msgstr "Abrir"
++
++msgid "Advanced Orca preferences"
++msgstr "Preferências avançadas do Orca"
++
++msgid "All of Orca's options, including braille, key bindings and pronunciation."
++msgstr "Todas as opções do Orca, incluindo braille, atalhos de teclado e pronúncia."
++
++msgid "Choose the language of the screen reader and of this window. English is the default."
++msgstr "Escolha a língua do leitor de ecrã e desta janela. O inglês é a língua predefinida."
++
++msgid "Same as the desktop"
++msgstr "Igual à do ambiente de trabalho"
++
++msgid "Tetun is spoken with a Portuguese voice, because there is no Tetun voice yet. Orca messages that are not translated into Tetun are shown in Portuguese."
++msgstr "O tétum é falado com uma voz portuguesa, porque ainda não existe uma voz em tétum. As mensagens do Orca que não estão traduzidas para tétum são mostradas em português."
++
++msgid "Voice"
++msgstr "Voz"
++
++msgid "Switch voice for other languages"
++msgstr "Mudar de voz para outras línguas"
++
++msgid "When a web page or document says it is in another language, use a voice for that language."
++msgstr "Quando uma página web ou documento indica que está noutra língua, usar uma voz dessa língua."
++
++msgid "How the screen reader sounds. Changes are used at once."
++msgstr "Como o leitor de ecrã soa. As alterações são aplicadas de imediato."
++
++msgid "Turn spoken output on or off."
++msgstr "Ligar ou desligar a saída de fala."
++
++msgid "Speed"
++msgstr "Velocidade"
++
++msgid "Lower is slower. 30 is the Eduka-Orca default."
++msgstr "Mais baixo é mais lento. 30 é o valor predefinido do Eduka-Orca."
++
++msgid "Pitch"
++msgstr "Tom"
++
++msgid "A lower voice is often easier to hear."
++msgstr "Uma voz mais grave costuma ser mais fácil de ouvir."
++
++msgid "Volume"
++msgstr "Volume"
++
++msgid "Reset voice"
++msgstr "Repor a voz"
++
++msgid "Try it"
++msgstr "Experimentar"
++
++msgid "Hear a sample sentence, or go back to the Eduka-Orca voice."
++msgstr "Ouvir uma frase de exemplo, ou voltar à voz do Eduka-Orca."
++
++msgid "What to say"
++msgstr "O que dizer"
++
++msgid "Punctuation"
++msgstr "Pontuação"
++
++msgid "How many punctuation marks are spoken."
++msgstr "Quantos sinais de pontuação são falados."
++
++msgid "Capital letters"
++msgstr "Letras maiúsculas"
++
++msgid "How capital letters are announced."
++msgstr "Como as letras maiúsculas são anunciadas."
++
++msgid "Numbers as digits"
++msgstr "Números como dígitos"
++
++msgid "Say “1 2 3” instead of “one hundred twenty-three”."
++msgstr "Dizer “1 2 3” em vez de “cento e vinte e três”."
++
++msgid "Captions show everything the screen reader says as text, like subtitles on television. They help people who are hard of hearing."
++msgstr "As legendas mostram em texto tudo o que o leitor de ecrã diz, como as legendas na televisão. Ajudam as pessoas com dificuldades auditivas."
++
++msgid "The caption window never takes the keyboard focus."
++msgstr "A janela das legendas nunca fica com o foco do teclado."
++
++msgid "This is how captions will look."
++msgstr "É assim que as legendas vão aparecer."
++
++msgid "Appearance"
++msgstr "Aspeto"
++
++msgid "Text size"
++msgstr "Tamanho do texto"
++
++msgid "Size of the caption text, in points."
++msgstr "Tamanho do texto das legendas, em pontos."
++
++msgid "Colours"
++msgstr "Cores"
++
++msgid "Choose a colour combination that is easy to read."
++msgstr "Escolha uma combinação de cores fácil de ler."
++
++msgid "Text colour"
++msgstr "Cor do texto"
++
++msgid "Background colour"
++msgstr "Cor do fundo"
++
++msgid "Preview"
++msgstr "Pré-visualização"
++
++msgid "How much the screen reader says, and what it says while you type."
++msgstr "Quanto diz o leitor de ecrã, e o que diz enquanto escreve."
++
++msgid "Reading"
++msgstr "Leitura"
++
++msgid "Amount of detail"
++msgstr "Nível de detalhe"
++
++msgid "Brief says less about each item; detailed says more."
++msgstr "Breve diz menos sobre cada elemento; detalhada diz mais."
++
++msgid "Tutorial messages"
++msgstr "Mensagens de ajuda"
++
++msgid "Explain how to use buttons, lists and other items."
++msgstr "Explicar como usar botões, listas e outros elementos."
++
++msgid "Read under the mouse"
++msgstr "Ler o que está sob o rato"
++
++msgid "Read what is under the mouse pointer. Used after the next restart."
++msgstr "Ler o que está sob o ponteiro do rato. Aplica-se depois de reiniciar."
++
++msgid "Keyboard"
++msgstr "Teclado"
++
++msgid "Keyboard layout"
++msgstr "Disposição do teclado"
++
++msgid "Choose Laptop if your keyboard has no Insert key."
++msgstr "Escolha Portátil se o teclado não tiver a tecla Insert."
++
++msgid "Speak keys"
++msgstr "Dizer as teclas"
++
++msgid "Say each key as you press it."
++msgstr "Dizer cada tecla quando a prime."
++
++msgid "Speak characters"
++msgstr "Dizer os caracteres"
++
++msgid "Say each character as it is typed."
++msgstr "Dizer cada caráter quando é escrito."
++
++msgid "Speak words"
++msgstr "Dizer as palavras"
++
++msgid "Say each word after you type it."
++msgstr "Dizer cada palavra depois de a escrever."
++
++msgid "Speak sentences"
++msgstr "Dizer as frases"
++
++msgid "Say each sentence after you type it."
++msgstr "Dizer cada frase depois de a escrever."
++
++msgid "Other output"
++msgstr "Outras saídas"
++
++msgid "Sounds"
++msgstr "Sons"
++
++msgid "Play short sounds, for example for progress bars."
++msgstr "Tocar sons curtos, por exemplo para barras de progresso."
++
++msgid "Braille"
++msgstr "Braille"
++
++msgid "Use a braille display if one is connected."
++msgstr "Usar uma linha braille, se estiver ligada."
++
++msgid "Choose when the screen reader starts and how it tells you it is on."
++msgstr "Escolha quando o leitor de ecrã arranca e como avisa que está ligado."
++
++msgid "Start at login"
++msgstr "Iniciar ao entrar"
++
++msgid "When starting"
++msgstr "Ao iniciar"
++
++msgid "Wait before starting"
++msgstr "Esperar antes de iniciar"
++
++msgid "Seconds to wait after login, so the desktop is ready first."
++msgstr "Segundos de espera depois de entrar, para o ambiente de trabalho ficar pronto primeiro."
++
++msgid "Welcome message"
++msgstr "Mensagem de boas-vindas"
++
++msgid "Say and show “Eduka-Orca is ready” when it starts."
++msgstr "Dizer e mostrar “O Eduka-Orca está pronto” ao iniciar."
++
++msgid "Notifications"
++msgstr "Notificações"
++
++msgid "Show a message on the screen when the screen reader is turned on or off."
++msgstr "Mostrar uma mensagem no ecrã quando o leitor de ecrã é ligado ou desligado."
++
++msgid "The Orca screen reader for Edukasaun OS, with slow speech and on-screen captions."
++msgstr "O leitor de ecrã Orca para o Edukasaun OS, com fala lenta e legendas no ecrã."
++
++msgid "Keyboard shortcuts"
++msgstr "Atalhos de teclado"
++
++msgid "Reset"
++msgstr "Repor"
++
++msgid "Reset all settings"
++msgstr "Repor todas as definições"
++
++msgid "Go back to the Eduka-Orca defaults: English, slow speech and captions."
++msgstr "Voltar aos valores predefinidos do Eduka-Orca: inglês, fala lenta e legendas."
++
++msgid "Eduka-Orca is free software, licensed under the GNU LGPL 2.1 or later. It is based on Orca by the GNOME Project."
++msgstr "O Eduka-Orca é software livre, licenciado sob a GNU LGPL 2.1 ou posterior. É baseado no Orca do Projeto GNOME."
++
++msgid "Restart the screen reader to use the new settings."
++msgstr "Reinicie o leitor de ecrã para usar as novas definições."
++
++msgid "The screen reader could not be started."
++msgstr "Não foi possível iniciar o leitor de ecrã."
++
++msgid "Hello! This is how Eduka-Orca sounds at this speed."
++msgstr "Olá! É assim que o Eduka-Orca soa a esta velocidade."
++
++msgid "No speech is available. Please install speech-dispatcher."
++msgstr "Não há fala disponível. Instale o speech-dispatcher."
++
++msgid "Reset all settings?"
++msgstr "Repor todas as definições?"
++
++msgid "All Eduka-Orca settings will go back to their defaults."
++msgstr "Todas as definições do Eduka-Orca vão voltar aos valores predefinidos."
++
++msgid "Cancel"
++msgstr "Cancelar"
+diff --git a/eduka/po/tet.po b/eduka/po/tet.po
+new file mode 100644
+index 0000000..cf56e78
+--- /dev/null
++++ b/eduka/po/tet.po
+@@ -0,0 +1,460 @@
++# Tetum translation of Eduka-Orca Settings.
++# Copyright (C) 2026 Edukasaun OS
++# This file is distributed under the same license as the eduka-orca package.
++#
++msgid ""
++msgstr ""
++"Project-Id-Version: eduka-orca 50.3+eduka2\n"
++"Report-Msgid-Bugs-To: https://github.com/hugomonizdorego/Eduka-Orca/issues\n"
++"PO-Revision-Date: 2026-10-01 00:00+0900\n"
++"Last-Translator: Edukasaun OS <hugomonizdorego@angelinojoana.com>\n"
++"Language-Team: Tetum\n"
++"Language: tet\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Plural-Forms: nplurals=2; plural=(n != 1);\n"
++
++msgid "Home"
++msgstr "Uma"
++
++msgid "Language"
++msgstr "Lian"
++
++msgid "Speech"
++msgstr "Ko'alia"
++
++msgid "Captions"
++msgstr "Legenda"
++
++msgid "Reading and typing"
++msgstr "Lee no hakerek"
++
++msgid "Startup"
++msgstr "Hahú"
++
++msgid "About"
++msgstr "Kona-ba"
++
++msgid "Very slow"
++msgstr "Neineik liu"
++
++msgid "Slow (recommended)"
++msgstr "Neineik (rekomendadu)"
++
++msgid "Normal"
++msgstr "Normál"
++
++msgid "Fast"
++msgstr "Lalais"
++
++msgid "Yellow on black"
++msgstr "Kinur iha metan"
++
++msgid "White on black"
++msgstr "Mutin iha metan"
++
++msgid "Black on white"
++msgstr "Metan iha mutin"
++
++msgid "Black on yellow"
++msgstr "Metan iha kinur"
++
++msgid "None"
++msgstr "La iha"
++
++msgid "Some"
++msgstr "Balun"
++
++msgid "Most"
++msgstr "Barak liu"
++
++msgid "All"
++msgstr "Hotu"
++
++msgid "Do not announce"
++msgstr "Labele anúnsia"
++
++msgid "Play a sound"
++msgstr "Toka son ida"
++
++msgid "Say “capital”"
++msgstr "Dehan “letra boot”"
++
++msgid "Brief"
++msgstr "Badak"
++
++msgid "Detailed"
++msgstr "Detalladu"
++
++msgid "Desktop (Orca key: Insert)"
++msgstr "Desktop (tekla Orca: Insert)"
++
++msgid "Laptop (Orca key: Caps Lock)"
++msgstr "Laptop (tekla Orca: Caps Lock)"
++
++msgid "Remember"
++msgstr "Hanoin"
++
++msgid "Start at login if it was on when you logged out."
++msgstr "Hahú bainhira tama se nia liga hela bainhira ita sai."
++
++msgid "Always"
++msgstr "Sempre"
++
++msgid "Always start the screen reader when you log in."
++msgstr "Hahú sempre leitór ekrã bainhira ita tama."
++
++msgid "Never"
++msgstr "Nunka"
++
++msgid "Never start automatically. Use the menu or Super+Alt+S."
++msgstr "Labele hahú automátiku. Uza menu ka Super+Alt+S."
++
++msgid "Turn the screen reader on or off"
++msgstr "Liga ka mate leitór ekrã"
++
++msgid "Open Orca preferences"
++msgstr "Loke preferénsia Orca nian"
++
++msgid "Learn mode: explains what each key does"
++msgstr "Modu aprende: esplika saida mak tekla ida-idak halo"
++
++msgid "Turn speech on or off"
++msgstr "Liga ka mate ko'alia"
++
++msgid "Where am I"
++msgstr "Ha'u iha ne'ebé"
++
++msgid "Show or hide captions"
++msgstr "Hatudu ka subar legenda"
++
++msgid "Eduka-Orca Settings"
++msgstr "Konfigurasaun Eduka-Orca"
++
++msgid "Screen reader with slow speech and captions"
++msgstr "Leitór ekrã ho ko'alia neineik no legenda"
++
++msgid "Restart now"
++msgstr "Hahú fali agora"
++
++msgid "Some settings could not be found, so changes will not be saved. Please reinstall the eduka-orca package."
++msgstr "La hetan konfigurasaun balun, entaun mudansa sei la rai. Favór instala fali pakote eduka-orca."
++
++msgid "Settings pages"
++msgstr "Pájina konfigurasaun"
++
++msgid "Screen reader is on"
++msgstr "Leitór ekrã liga hela"
++
++msgid "Screen reader is off"
++msgstr "Leitór ekrã mate hela"
++
++msgid "Welcome"
++msgstr "Bemvindu"
++
++msgid "The screen reader is on"
++msgstr "Leitór ekrã liga hela"
++
++msgid "Eduka-Orca is reading the screen aloud and showing captions."
++msgstr "Eduka-Orca lee hela ekrã ho lian no hatudu legenda."
++
++msgid "Turn off"
++msgstr "Mate"
++
++msgid "The screen reader is off"
++msgstr "Leitór ekrã mate hela"
++
++msgid "Turn it on to hear and read what is on the screen."
++msgstr "Liga nia atu rona no lee saida mak iha ekrã."
++
++msgid "Turn on"
++msgstr "Liga"
++
++msgid "Quick settings"
++msgstr "Konfigurasaun lalais"
++
++msgid "Speech speed"
++msgstr "Velosidade ko'alia nian"
++
++msgid "Lower is slower. Eduka-Orca speaks slowly by default."
++msgstr "Ki'ik liu, neineik liu. Eduka-Orca ko'alia neineik nu'udar padraun."
++
++msgid "Show captions"
++msgstr "Hatudu legenda"
++
++msgid "Show everything the screen reader says as large text at the bottom of the screen."
++msgstr "Hatudu buat hotu ne'ebé leitór ekrã dehan ho letra boot iha ekrã nia okos."
++
++msgid "Test voice"
++msgstr "Koko vós"
++
++msgid "Hear the current voice and speed."
++msgstr "Rona vós no velosidade agora nian."
++
++msgid "Settings window"
++msgstr "Janela konfigurasaun"
++
++msgid "Large text"
++msgstr "Letra boot"
++
++msgid "Use bigger text in this window."
++msgstr "Uza letra boot liu iha janela ne'e."
++
++msgid "High contrast"
++msgstr "Kontraste aas"
++
++msgid "Use yellow text on black in this window."
++msgstr "Uza letra kinur iha metan iha janela ne'e."
++
++msgid "More options"
++msgstr "Opsaun seluk"
++
++msgid "Open"
++msgstr "Loke"
++
++msgid "Advanced Orca preferences"
++msgstr "Preferénsia avansada Orca nian"
++
++msgid "All of Orca's options, including braille, key bindings and pronunciation."
++msgstr "Opsaun Orca nian hotu, inklui braille, atallu tekla no pronúnsia."
++
++msgid "Choose the language of the screen reader and of this window. English is the default."
++msgstr "Hili lian ba leitór ekrã no ba janela ne'e. Inglés mak lian padraun."
++
++msgid "Same as the desktop"
++msgstr "Hanesan ho desktop"
++
++msgid "Tetun is spoken with a Portuguese voice, because there is no Tetun voice yet. Orca messages that are not translated into Tetun are shown in Portuguese."
++msgstr "Tetun ko'alia ho vós portugés, tanba seidauk iha vós Tetun. Mensajen Orca nian ne'ebé seidauk tradús ba Tetun sei hatudu iha portugés."
++
++msgid "Voice"
++msgstr "Vós"
++
++msgid "Switch voice for other languages"
++msgstr "Troka vós ba lian seluk"
++
++msgid "When a web page or document says it is in another language, use a voice for that language."
++msgstr "Bainhira pájina web ka dokumentu dehan nia iha lian seluk, uza vós ba lian ne'e."
++
++msgid "How the screen reader sounds. Changes are used at once."
++msgstr "Oinsá leitór ekrã nia vós. Mudansa uza kedas."
++
++msgid "Turn spoken output on or off."
++msgstr "Liga ka mate ko'alia."
++
++msgid "Speed"
++msgstr "Velosidade"
++
++msgid "Lower is slower. 30 is the Eduka-Orca default."
++msgstr "Ki'ik liu, neineik liu. 30 mak padraun Eduka-Orca nian."
++
++msgid "Pitch"
++msgstr "Tonu"
++
++msgid "A lower voice is often easier to hear."
++msgstr "Vós ne'ebé ki'ik liu dala barak fasil liu atu rona."
++
++msgid "Volume"
++msgstr "Volume"
++
++msgid "Reset voice"
++msgstr "Reseta vós"
++
++msgid "Try it"
++msgstr "Koko"
++
++msgid "Hear a sample sentence, or go back to the Eduka-Orca voice."
++msgstr "Rona fraze ezemplu ida, ka fila ba vós Eduka-Orca nian."
++
++msgid "What to say"
++msgstr "Saida mak atu dehan"
++
++msgid "Punctuation"
++msgstr "Pontuasaun"
++
++msgid "How many punctuation marks are spoken."
++msgstr "Pontuasaun hira mak sei dehan."
++
++msgid "Capital letters"
++msgstr "Letra boot"
++
++msgid "How capital letters are announced."
++msgstr "Oinsá atu anúnsia letra boot."
++
++msgid "Numbers as digits"
++msgstr "Númeru hanesan dijitu"
++
++msgid "Say “1 2 3” instead of “one hundred twenty-three”."
++msgstr "Dehan “1 2 3” duké “sentu ruanulu resin tolu”."
++
++msgid "Captions show everything the screen reader says as text, like subtitles on television. They help people who are hard of hearing."
++msgstr "Legenda hatudu buat hotu ne'ebé leitór ekrã dehan nu'udar testu, hanesan legenda iha televizaun. Ida ne'e ajuda ema ne'ebé susar atu rona."
++
++msgid "The caption window never takes the keyboard focus."
++msgstr "Janela legenda nunka foti foku teklau nian."
++
++msgid "This is how captions will look."
++msgstr "Legenda sei hanesan ne'e."
++
++msgid "Appearance"
++msgstr "Aparénsia"
++
++msgid "Text size"
++msgstr "Medida letra"
++
++msgid "Size of the caption text, in points."
++msgstr "Medida letra legenda nian, iha pontu."
++
++msgid "Colours"
++msgstr "Kór"
++
++msgid "Choose a colour combination that is easy to read."
++msgstr "Hili kombinasaun kór ne'ebé fasil atu lee."
++
++msgid "Text colour"
++msgstr "Kór letra"
++
++msgid "Background colour"
++msgstr "Kór fundu"
++
++msgid "Preview"
++msgstr "Haree uluk"
++
++msgid "How much the screen reader says, and what it says while you type."
++msgstr "Leitór ekrã ko'alia oinsá barak, no saida mak nia dehan bainhira ita hakerek."
++
++msgid "Reading"
++msgstr "Lee"
++
++msgid "Amount of detail"
++msgstr "Kuantidade detalle"
++
++msgid "Brief says less about each item; detailed says more."
++msgstr "Badak dehan uitoan kona-ba buat ida-idak; detalladu dehan barak liu."
++
++msgid "Tutorial messages"
++msgstr "Mensajen tutoriál"
++
++msgid "Explain how to use buttons, lists and other items."
++msgstr "Esplika oinsá uza butaun, lista no buat seluk."
++
++msgid "Read under the mouse"
++msgstr "Lee buat iha rato nia okos"
++
++msgid "Read what is under the mouse pointer. Used after the next restart."
++msgstr "Lee saida mak iha rato nia okos. Uza depois hahú fali."
++
++msgid "Keyboard"
++msgstr "Teklau"
++
++msgid "Keyboard layout"
++msgstr "Layout teklau"
++
++msgid "Choose Laptop if your keyboard has no Insert key."
++msgstr "Hili Laptop se ita-nia teklau la iha tekla Insert."
++
++msgid "Speak keys"
++msgstr "Dehan tekla"
++
++msgid "Say each key as you press it."
++msgstr "Dehan tekla ida-idak bainhira ita baku."
++
++msgid "Speak characters"
++msgstr "Dehan karakter"
++
++msgid "Say each character as it is typed."
++msgstr "Dehan karakter ida-idak bainhira hakerek."
++
++msgid "Speak words"
++msgstr "Dehan liafuan"
++
++msgid "Say each word after you type it."
++msgstr "Dehan liafuan ida-idak depois ita hakerek."
++
++msgid "Speak sentences"
++msgstr "Dehan fraze"
++
++msgid "Say each sentence after you type it."
++msgstr "Dehan fraze ida-idak depois ita hakerek."
++
++msgid "Other output"
++msgstr "Saída seluk"
++
++msgid "Sounds"
++msgstr "Son"
++
++msgid "Play short sounds, for example for progress bars."
++msgstr "Toka son badak, ezemplu ba barra progresu."
++
++msgid "Braille"
++msgstr "Braille"
++
++msgid "Use a braille display if one is connected."
++msgstr "Uza ekrã braille se iha ida liga hela."
++
++msgid "Choose when the screen reader starts and how it tells you it is on."
++msgstr "Hili bainhira leitór ekrã hahú no oinsá nia fó-hatene katak nia liga ona."
++
++msgid "Start at login"
++msgstr "Hahú bainhira tama"
++
++msgid "When starting"
++msgstr "Bainhira hahú"
++
++msgid "Wait before starting"
++msgstr "Hein molok hahú"
++
++msgid "Seconds to wait after login, so the desktop is ready first."
++msgstr "Segundu hira atu hein depois tama, atu desktop prontu uluk."
++
++msgid "Welcome message"
++msgstr "Mensajen bemvindu"
++
++msgid "Say and show “Eduka-Orca is ready” when it starts."
++msgstr "Dehan no hatudu “Eduka-Orca prontu ona” bainhira hahú."
++
++msgid "Notifications"
++msgstr "Notifikasaun"
++
++msgid "Show a message on the screen when the screen reader is turned on or off."
++msgstr "Hatudu mensajen iha ekrã bainhira leitór ekrã liga ka mate."
++
++msgid "The Orca screen reader for Edukasaun OS, with slow speech and on-screen captions."
++msgstr "Leitór ekrã Orca ba Edukasaun OS, ho ko'alia neineik no legenda iha ekrã."
++
++msgid "Keyboard shortcuts"
++msgstr "Atallu teklau"
++
++msgid "Reset"
++msgstr "Reseta"
++
++msgid "Reset all settings"
++msgstr "Reseta konfigurasaun hotu"
++
++msgid "Go back to the Eduka-Orca defaults: English, slow speech and captions."
++msgstr "Fila ba padraun Eduka-Orca nian: Inglés, ko'alia neineik no legenda."
++
++msgid "Eduka-Orca is free software, licensed under the GNU LGPL 2.1 or later. It is based on Orca by the GNOME Project."
++msgstr "Eduka-Orca mak software livre, ho lisensa GNU LGPL 2.1 ka foun liu. Nia bazeia ba Orca husi Projetu GNOME."
++
++msgid "Restart the screen reader to use the new settings."
++msgstr "Hahú fali leitór ekrã atu uza konfigurasaun foun."
++
++msgid "The screen reader could not be started."
++msgstr "La bele hahú leitór ekrã."
++
++msgid "Hello! This is how Eduka-Orca sounds at this speed."
++msgstr "Olá! Eduka-Orca nia vós hanesan ne'e ho velosidade ida ne'e."
++
++msgid "No speech is available. Please install speech-dispatcher."
++msgstr "La iha vós. Favór instala speech-dispatcher."
++
++msgid "Reset all settings?"
++msgstr "Reseta konfigurasaun hotu?"
++
++msgid "All Eduka-Orca settings will go back to their defaults."
++msgstr "Konfigurasaun Eduka-Orca hotu sei fila ba padraun."
++
++msgid "Cancel"
++msgstr "Kansela"
+diff --git a/eduka/settings/eduka_orca_settings/__init__.py b/eduka/settings/eduka_orca_settings/__init__.py
+new file mode 100644
+index 0000000..cbc7a74
+--- /dev/null
++++ b/eduka/settings/eduka_orca_settings/__init__.py
+@@ -0,0 +1,17 @@
++# Eduka-Orca Settings
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""Eduka-Orca Settings: a simple settings window for the Eduka-Orca screen reader."""
++
++VERSION = "50.3+eduka2"
+diff --git a/eduka/settings/eduka_orca_settings/__main__.py b/eduka/settings/eduka_orca_settings/__main__.py
+new file mode 100644
+index 0000000..b8c2e89
+--- /dev/null
++++ b/eduka/settings/eduka_orca_settings/__main__.py
+@@ -0,0 +1,21 @@
++# Eduka-Orca Settings
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""Runs Eduka-Orca Settings from a source tree: python3 -m eduka_orca_settings."""
++
++import sys
++
++from .app import main
++
++sys.exit(main())
+diff --git a/eduka/settings/eduka_orca_settings/app.py b/eduka/settings/eduka_orca_settings/app.py
+new file mode 100644
+index 0000000..f4d0367
+--- /dev/null
++++ b/eduka/settings/eduka_orca_settings/app.py
+@@ -0,0 +1,1134 @@
++# Eduka-Orca Settings
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""The Eduka-Orca Settings window (GTK 3).
++
++The window is built for people who are hard of hearing or have low vision: large
++controls, a short description under every option, keyboard navigation everywhere,
++and every change is saved and applied at once (there is no "Apply" button to forget).
++"""
++
++# pylint: disable=too-many-lines,too-many-instance-attributes,too-many-public-methods
++
++from __future__ import annotations
++
++import sys
++from typing import TYPE_CHECKING, Any
++
++import gi
++
++gi.require_version("Gdk", "3.0")
++gi.require_version("Gtk", "3.0")
++from gi.repository import Gdk, Gio, GLib, Gtk
++
++from . import VERSION, backend, i18n
++from .i18n import N_, _
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++
++APPLICATION_ID = "org.edukasaun.EdukaOrca.Settings"
++SAVE_DELAY_MS = 250
++
++CSS = b"""
++.eduka-sidebar { background-color: alpha(@theme_fg_color, 0.04); }
++.eduka-sidebar row { padding: 10px 14px; border-radius: 8px; margin: 2px 8px; }
++.eduka-sidebar row:selected { background-color: @theme_selected_bg_color;
++                              color: @theme_selected_fg_color; }
++.eduka-sidebar-brand { padding: 18px 16px 10px 16px; }
++.eduka-brand-title { font-size: 1.25em; font-weight: bold; }
++.eduka-page { padding: 24px 32px 32px 32px; }
++.eduka-page-title { font-size: 1.7em; font-weight: bold; }
++.eduka-page-intro { color: alpha(@theme_fg_color, 0.78); }
++.eduka-section-title { font-weight: bold; color: alpha(@theme_fg_color, 0.85);
++                       margin-top: 10px; }
++.eduka-card { background-color: @theme_base_color; border-radius: 12px;
++              border: 1px solid alpha(@theme_fg_color, 0.14); }
++.eduka-card row { padding: 12px 16px; }
++.eduka-card row:not(:last-child) { border-bottom: 1px solid alpha(@theme_fg_color, 0.08); }
++.eduka-row-title { font-weight: bold; }
++.eduka-row-subtitle { color: alpha(@theme_fg_color, 0.72); }
++.eduka-hero { border-radius: 16px; padding: 22px 26px; }
++.eduka-hero-on { background-image: linear-gradient(135deg, #1b6e3c, #2e9a57); color: #ffffff; }
++.eduka-hero-off { background-image: linear-gradient(135deg, #4a4f57, #6b717b); color: #ffffff; }
++.eduka-hero-title { font-size: 1.6em; font-weight: bold; }
++.eduka-big-button { font-size: 1.2em; font-weight: bold; padding: 10px 26px;
++                    border-radius: 10px; }
++.eduka-preset { padding: 6px 14px; border-radius: 18px; }
++.eduka-caption-preview { font-weight: bold; padding: 14px 18px; border-radius: 10px; }
++.eduka-note { background-color: alpha(@theme_selected_bg_color, 0.12);
++              border-radius: 10px; padding: 10px 14px; }
++window.eduka-large-text { font-size: 14pt; }
++window.eduka-high-contrast,
++window.eduka-high-contrast .eduka-card,
++window.eduka-high-contrast .eduka-sidebar,
++window.eduka-high-contrast .eduka-note { background-color: #000000; color: #ffff00;
++                                         border-color: #ffff00; }
++window.eduka-high-contrast .eduka-row-subtitle,
++window.eduka-high-contrast .eduka-page-intro,
++window.eduka-high-contrast .eduka-section-title { color: #ffffff; }
++window.eduka-high-contrast button { background-image: none; background-color: #000000;
++                                    color: #ffff00; border: 2px solid #ffff00; }
++window.eduka-high-contrast headerbar { background-image: none; background-color: #000000;
++                                       color: #ffff00; border-color: #ffff00; }
++window.eduka-high-contrast headerbar .subtitle { color: #ffffff; }
++window.eduka-high-contrast .eduka-sidebar row:selected { background-color: #ffff00;
++                                                         color: #000000; }
++"""
++
++# Page id, icon, title (translated at build time).
++PAGES: tuple[tuple[str, str, str], ...] = (
++    ("home", "go-home-symbolic", N_("Home")),
++    ("language", "preferences-desktop-locale-symbolic", N_("Language")),
++    ("speech", "audio-volume-high-symbolic", N_("Speech")),
++    ("captions", "media-view-subtitles-symbolic", N_("Captions")),
++    ("reading", "input-keyboard-symbolic", N_("Reading and typing")),
++    ("startup", "system-run-symbolic", N_("Startup")),
++    ("about", "help-about-symbolic", N_("About")),
++)
++
++RATE_PRESET_LABELS = {
++    "very-slow": N_("Very slow"),
++    "slow": N_("Slow (recommended)"),
++    "normal": N_("Normal"),
++    "fast": N_("Fast"),
++}
++
++CAPTION_PRESET_LABELS = {
++    "yellow-on-black": N_("Yellow on black"),
++    "white-on-black": N_("White on black"),
++    "black-on-white": N_("Black on white"),
++    "black-on-yellow": N_("Black on yellow"),
++}
++
++PUNCTUATION_LEVELS = (
++    ("none", N_("None")),
++    ("some", N_("Some")),
++    ("most", N_("Most")),
++    ("all", N_("All")),
++)
++
++CAPITALIZATION_STYLES = (
++    ("none", N_("Do not announce")),
++    ("icon", N_("Play a sound")),
++    ("spell", N_("Say “capital”")),
++)
++
++VERBOSITY_LEVELS = (
++    ("brief", N_("Brief")),
++    ("verbose", N_("Detailed")),
++)
++
++KEYBOARD_LAYOUTS = (
++    ("desktop", N_("Desktop (Orca key: Insert)")),
++    ("laptop", N_("Laptop (Orca key: Caps Lock)")),
++)
++
++STARTUP_MODES = (
++    ("remember", N_("Remember"), N_("Start at login if it was on when you logged out.")),
++    ("always", N_("Always"), N_("Always start the screen reader when you log in.")),
++    ("never", N_("Never"), N_("Never start automatically. Use the menu or Super+Alt+S.")),
++)
++
++SHORTCUTS = (
++    ("Super+Alt+S", N_("Turn the screen reader on or off")),
++    ("Orca+Space", N_("Open Orca preferences")),
++    ("Orca+Shift+D", N_("Show or hide captions")),
++    ("Orca+S", N_("Turn speech on or off")),
++    ("Orca+H", N_("Learn mode: explains what each key does")),
++    ("KP Enter / Orca+Enter", N_("Where am I")),
++)
++
++
++def _hex_from_rgba(rgba: Gdk.RGBA) -> str:
++    red, green, blue = (round(channel * 255) for channel in (rgba.red, rgba.green, rgba.blue))
++    return f"#{red:02x}{green:02x}{blue:02x}"
++
++
++def _rgba_from_hex(value: str) -> Gdk.RGBA:
++    rgba = Gdk.RGBA()
++    if not rgba.parse(value):
++        rgba.parse("#000000")
++    return rgba
++
++
++def _set_accessible(widget: Gtk.Widget, name: str, description: str = "") -> None:
++    accessible = widget.get_accessible()
++    if accessible is None:
++        return
++    accessible.set_name(name)
++    if description:
++        accessible.set_description(description)
++
++
++class SettingsWindow(Gtk.ApplicationWindow):
++    """The main window."""
++
++    def __init__(
++        self,
++        application: Gtk.Application,
++        store: backend.SettingsStore,
++        controller: backend.OrcaController,
++        start_page: str = "home",
++    ) -> None:
++        super().__init__(application=application)
++        self._store = store
++        self._controller = controller
++        self._pending: dict[str, Any] = {}
++        self._save_source = 0
++        self._orca_running = controller.is_running()
++        self._restart_needed = False
++        self._updating = False
++        self._current_page = start_page
++        self._status_widgets: list[Callable[[], None]] = []
++        # Widgets showing each setting, so that a change on one page updates the others.
++        self._views: dict[str, list[Callable[[Any], None]]] = {}
++
++        self.set_default_size(960, 680)
++        self.set_icon_name("orca")
++        self.connect("key-press-event", self._on_key_press)
++
++        self._header = Gtk.HeaderBar(show_close_button=True)
++        self.set_titlebar(self._header)
++
++        self._root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
++        self.add(self._root)
++
++        self._watch_id = Gio.bus_watch_name(
++            Gio.BusType.SESSION,
++            backend.ORCA_BUS_NAME,
++            Gio.BusNameWatcherFlags.NONE,
++            self._on_orca_appeared,
++            self._on_orca_vanished,
++        )
++        self.connect("destroy", self._on_destroy)
++
++        self._apply_window_style()
++        self._build()
++
++    # ------------------------------------------------------------------ building
++
++    def _build(self) -> None:
++        """(Re)builds every widget in the current language."""
++
++        for child in self._root.get_children():
++            self._root.remove(child)
++            child.destroy()
++        self._status_widgets = []
++        self._views = {}
++
++        self.set_title(_("Eduka-Orca Settings"))
++        self._header.set_title(_("Eduka-Orca Settings"))
++        self._header.set_subtitle(_("Screen reader with slow speech and captions"))
++
++        self._infobar = Gtk.InfoBar(message_type=Gtk.MessageType.INFO, show_close_button=True)
++        self._infobar.set_no_show_all(True)
++        self._infobar_label = Gtk.Label(xalign=0, wrap=True)
++        self._infobar.get_content_area().add(self._infobar_label)
++        self._infobar.add_button(_("Restart now"), Gtk.ResponseType.APPLY)
++        self._infobar.connect("response", self._on_infobar_response)
++        self._root.pack_start(self._infobar, False, False, 0)
++
++        if self._store.missing_schemas:
++            warning = Gtk.InfoBar(message_type=Gtk.MessageType.WARNING)
++            label = Gtk.Label(
++                label=_(
++                    "Some settings could not be found, so changes will not be saved. "
++                    "Please reinstall the eduka-orca package."
++                ),
++                xalign=0,
++                wrap=True,
++            )
++            warning.get_content_area().add(label)
++            self._root.pack_start(warning, False, False, 0)
++
++        paned = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
++        self._root.pack_start(paned, True, True, 0)
++
++        self._stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
++        builders = {
++            "home": self._build_home,
++            "language": self._build_language,
++            "speech": self._build_speech,
++            "captions": self._build_captions,
++            "reading": self._build_reading,
++            "startup": self._build_startup,
++            "about": self._build_about,
++        }
++        for page_id, _icon, title in PAGES:
++            scrolled = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
++            content = builders[page_id]()
++            clamp = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
++            clamp.set_halign(Gtk.Align.FILL)
++            clamp.pack_start(content, False, False, 0)
++            scrolled.add(clamp)
++            self._stack.add_titled(scrolled, page_id, _(title))
++
++        paned.pack_start(self._build_sidebar(), False, False, 0)
++        paned.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 0)
++        paned.pack_start(self._stack, True, True, 0)
++
++        self._root.show_all()
++        self._show_page(self._current_page)
++        self._refresh_status()
++        self._update_infobar()
++
++    def _build_sidebar(self) -> Gtk.Widget:
++        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
++        box.get_style_context().add_class("eduka-sidebar")
++        box.set_size_request(240, -1)
++
++        brand = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
++        brand.get_style_context().add_class("eduka-sidebar-brand")
++        icon = Gtk.Image.new_from_icon_name("orca", Gtk.IconSize.DND)
++        brand.pack_start(icon, False, False, 0)
++        names = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
++        title = Gtk.Label(label="Eduka-Orca", xalign=0)
++        title.get_style_context().add_class("eduka-brand-title")
++        names.pack_start(title, False, False, 0)
++        self._sidebar_status = Gtk.Label(xalign=0)
++        self._sidebar_status.get_style_context().add_class("eduka-row-subtitle")
++        names.pack_start(self._sidebar_status, False, False, 0)
++        brand.pack_start(names, True, True, 0)
++        box.pack_start(brand, False, False, 0)
++
++        self._sidebar = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
++        self._sidebar.get_style_context().add_class("eduka-sidebar")
++        _set_accessible(self._sidebar, _("Settings pages"))
++        for page_id, icon_name, title in PAGES:
++            row = Gtk.ListBoxRow()
++            row.page_id = page_id  # type: ignore[attr-defined]
++            line = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
++            line.pack_start(
++                Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.MENU), False, False, 0
++            )
++            line.pack_start(Gtk.Label(label=_(title), xalign=0), True, True, 0)
++            row.add(line)
++            self._sidebar.add(row)
++        self._sidebar.connect("row-selected", self._on_sidebar_row_selected)
++        box.pack_start(self._sidebar, True, True, 0)
++
++        def update() -> None:
++            self._sidebar_status.set_label(
++                _("Screen reader is on") if self._orca_running else _("Screen reader is off")
++            )
++
++        self._status_widgets.append(update)
++        return box
++
++    # Small widget helpers ----------------------------------------------------
++
++    @staticmethod
++    def _page(title: str, intro: str) -> Gtk.Box:
++        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
++        page.get_style_context().add_class("eduka-page")
++        label = Gtk.Label(label=title, xalign=0)
++        label.get_style_context().add_class("eduka-page-title")
++        page.pack_start(label, False, False, 0)
++        if intro:
++            text = Gtk.Label(label=intro, xalign=0, wrap=True)
++            text.get_style_context().add_class("eduka-page-intro")
++            page.pack_start(text, False, False, 0)
++        return page
++
++    @staticmethod
++    def _section(page: Gtk.Box, title: str) -> Gtk.ListBox:
++        if title:
++            label = Gtk.Label(label=title, xalign=0)
++            label.get_style_context().add_class("eduka-section-title")
++            page.pack_start(label, False, False, 0)
++        card = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
++        card.get_style_context().add_class("eduka-card")
++        if title:
++            _set_accessible(card, title)
++        page.pack_start(card, False, False, 0)
++        return card
++
++    @staticmethod
++    def _row(
++        card: Gtk.ListBox,
++        title: str,
++        subtitle: str,
++        control: Gtk.Widget | None,
++        vertical: bool = False,
++    ) -> Gtk.ListBoxRow:
++        row = Gtk.ListBoxRow(activatable=False)
++        orientation = Gtk.Orientation.VERTICAL if vertical else Gtk.Orientation.HORIZONTAL
++        line = Gtk.Box(orientation=orientation, spacing=8 if vertical else 16)
++        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
++        title_label = Gtk.Label(label=title, xalign=0, wrap=True, use_underline=False)
++        title_label.get_style_context().add_class("eduka-row-title")
++        texts.pack_start(title_label, False, False, 0)
++        if subtitle:
++            sub = Gtk.Label(label=subtitle, xalign=0, wrap=True)
++            sub.get_style_context().add_class("eduka-row-subtitle")
++            texts.pack_start(sub, False, False, 0)
++        line.pack_start(texts, True, True, 0)
++        if control is not None:
++            if not vertical:
++                control.set_valign(Gtk.Align.CENTER)
++            line.pack_end(control, vertical, vertical, 0)
++            title_label.set_mnemonic_widget(control)
++            _set_accessible(control, title, subtitle)
++        row.add(line)
++        card.add(row)
++        return row
++
++    def _switch(self, name: str) -> Gtk.Switch:
++        switch = Gtk.Switch(active=bool(self._store.get(name)))
++        switch.connect("notify::active", lambda w, _p: self._changed(name, w.get_active()))
++        self._views.setdefault(name, []).append(lambda v: switch.set_active(bool(v)))
++        return switch
++
++    def _combo(self, name: str, options: tuple[tuple[str, str], ...]) -> Gtk.ComboBoxText:
++        combo = Gtk.ComboBoxText()
++        for value, label in options:
++            combo.append(value, _(label))
++        combo.set_active_id(str(self._store.get(name)))
++        combo.connect("changed", lambda w: self._changed(name, w.get_active_id()))
++        self._views.setdefault(name, []).append(lambda v: combo.set_active_id(str(v)))
++        return combo
++
++    def _scale(
++        self,
++        name: str,
++        lower: float,
++        upper: float,
++        step: float,
++        digits: int,
++        marks: tuple[tuple[float, str], ...] = (),
++    ) -> Gtk.Scale:
++        adjustment = Gtk.Adjustment(
++            value=float(self._store.get(name)),
++            lower=lower,
++            upper=upper,
++            step_increment=step,
++            page_increment=step * 10,
++        )
++        scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=adjustment)
++        scale.set_digits(digits)
++        scale.set_value_pos(Gtk.PositionType.RIGHT)
++        scale.set_hexpand(True)
++        scale.set_size_request(320, -1)
++        for value, label in marks:
++            scale.add_mark(value, Gtk.PositionType.BOTTOM, label)
++        scale.connect("value-changed", lambda w: self._changed(name, w.get_value()))
++        self._views.setdefault(name, []).append(lambda v: scale.set_value(float(v)))
++        return scale
++
++    # Pages -------------------------------------------------------------------
++
++    def _build_home(self) -> Gtk.Widget:
++        page = self._page(_("Welcome"), "")
++
++        hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
++        hero.get_style_context().add_class("eduka-hero")
++        hero.pack_start(Gtk.Image.new_from_icon_name("orca", Gtk.IconSize.DIALOG), False, False, 0)
++        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
++        hero_title = Gtk.Label(xalign=0, wrap=True)
++        hero_title.get_style_context().add_class("eduka-hero-title")
++        hero_text = Gtk.Label(xalign=0, wrap=True)
++        texts.pack_start(hero_title, False, False, 0)
++        texts.pack_start(hero_text, False, False, 0)
++        hero.pack_start(texts, True, True, 0)
++        toggle = Gtk.Button()
++        toggle.get_style_context().add_class("eduka-big-button")
++        toggle.set_valign(Gtk.Align.CENTER)
++        toggle.connect("clicked", self._on_toggle_clicked)
++        hero.pack_end(toggle, False, False, 0)
++        page.pack_start(hero, False, False, 0)
++
++        def update() -> None:
++            style = hero.get_style_context()
++            style.remove_class("eduka-hero-on")
++            style.remove_class("eduka-hero-off")
++            if self._orca_running:
++                style.add_class("eduka-hero-on")
++                hero_title.set_label(_("The screen reader is on"))
++                hero_text.set_label(
++                    _("Eduka-Orca is reading the screen aloud and showing captions.")
++                )
++                toggle.set_label(_("Turn off"))
++            else:
++                style.add_class("eduka-hero-off")
++                hero_title.set_label(_("The screen reader is off"))
++                hero_text.set_label(_("Turn it on to hear and read what is on the screen."))
++                toggle.set_label(_("Turn on"))
++            _set_accessible(toggle, toggle.get_label(), hero_title.get_label())
++
++        self._status_widgets.append(update)
++
++        card = self._section(page, _("Quick settings"))
++        self._row(
++            card,
++            _("Speech speed"),
++            _("Lower is slower. Eduka-Orca speaks slowly by default."),
++            self._scale("rate", 0, 100, 1, 0),
++            vertical=True,
++        )
++        self._row(
++            card,
++            _("Show captions"),
++            _("Show everything the screen reader says as large text at the bottom of the screen."),
++            self._switch("captions-enabled"),
++        )
++        test = Gtk.Button(label=_("Test voice"))
++        test.connect("clicked", self._on_test_voice)
++        self._row(card, _("Test voice"), _("Hear the current voice and speed."), test)
++
++        card = self._section(page, _("Settings window"))
++        self._row(
++            card, _("Large text"), _("Use bigger text in this window."), self._switch("large-text")
++        )
++        self._row(
++            card,
++            _("High contrast"),
++            _("Use yellow text on black in this window."),
++            self._switch("high-contrast"),
++        )
++
++        card = self._section(page, _("More options"))
++        advanced = Gtk.Button(label=_("Open"))
++        advanced.connect("clicked", lambda _b: self._controller.show_orca_preferences())
++        self._row(
++            card,
++            _("Advanced Orca preferences"),
++            _("All of Orca's options, including braille, key bindings and pronunciation."),
++            advanced,
++        )
++        return page
++
++    def _build_language(self) -> Gtk.Widget:
++        page = self._page(
++            _("Language"),
++            _(
++                "Choose the language of the screen reader and of this window. English is the "
++                "default."
++            ),
++        )
++        card = self._section(page, _("Language"))
++        current = str(self._store.get("language"))
++        group: Gtk.RadioButton | None = None
++        options = [*i18n.LANGUAGES, ("system", _("Same as the desktop"))]
++        for code, name in options:
++            radio = Gtk.RadioButton.new_with_label_from_widget(group, name)
++            group = group or radio
++            radio.set_active(code == current)
++            radio.connect("toggled", self._on_language_toggled, code)
++            row = Gtk.ListBoxRow(activatable=False)
++            row.add(radio)
++            card.add(row)
++
++        note = Gtk.Label(
++            label=_(
++                "Tetun is spoken with a Portuguese voice, because there is no Tetun voice "
++                "yet. Orca messages that are not translated into Tetun are shown in "
++                "Portuguese."
++            ),
++            xalign=0,
++            wrap=True,
++        )
++        note.get_style_context().add_class("eduka-note")
++        page.pack_start(note, False, False, 0)
++
++        card = self._section(page, _("Voice"))
++        self._row(
++            card,
++            _("Switch voice for other languages"),
++            _(
++                "When a web page or document says it is in another language, use a voice for "
++                "that language."
++            ),
++            self._switch("auto-language-switching"),
++        )
++        return page
++
++    def _build_speech(self) -> Gtk.Widget:
++        page = self._page(
++            _("Speech"),
++            _("How the screen reader sounds. Changes are used at once."),
++        )
++        card = self._section(page, _("Voice"))
++        self._row(
++            card, _("Speech"), _("Turn spoken output on or off."), self._switch("speech-enabled")
++        )
++
++        rate_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
++        rate_scale = self._scale("rate", 0, 100, 1, 0)
++        rate_box.pack_start(rate_scale, False, False, 0)
++        presets = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4)
++        presets.set_column_spacing(8)
++        for preset_id, value in backend.RATE_PRESETS:
++            button = Gtk.Button(label=_(RATE_PRESET_LABELS[preset_id]))
++            button.get_style_context().add_class("eduka-preset")
++            button.connect("clicked", lambda _b, v=value: rate_scale.set_value(v))
++            presets.add(button)
++        rate_box.pack_start(presets, False, False, 0)
++        self._row(
++            card,
++            _("Speed"),
++            _("Lower is slower. 30 is the Eduka-Orca default."),
++            rate_box,
++            vertical=True,
++        )
++        _set_accessible(rate_scale, _("Speed"))
++
++        self._row(
++            card,
++            _("Pitch"),
++            _("A lower voice is often easier to hear."),
++            self._scale("pitch", 0, 10, 0.1, 1),
++            vertical=True,
++        )
++        self._row(card, _("Volume"), "", self._scale("volume", 0, 10, 0.1, 1), vertical=True)
++
++        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
++        test = Gtk.Button(label=_("Test voice"))
++        test.connect("clicked", self._on_test_voice)
++        buttons.pack_start(test, False, False, 0)
++        reset = Gtk.Button(label=_("Reset voice"))
++        reset.connect("clicked", self._on_reset_voice)
++        buttons.pack_start(reset, False, False, 0)
++        self._row(
++            card,
++            _("Try it"),
++            _("Hear a sample sentence, or go back to the Eduka-Orca voice."),
++            buttons,
++        )
++
++        card = self._section(page, _("What to say"))
++        self._row(
++            card,
++            _("Punctuation"),
++            _("How many punctuation marks are spoken."),
++            self._combo("punctuation-level", PUNCTUATION_LEVELS),
++        )
++        self._row(
++            card,
++            _("Capital letters"),
++            _("How capital letters are announced."),
++            self._combo("capitalization-style", CAPITALIZATION_STYLES),
++        )
++        self._row(
++            card,
++            _("Numbers as digits"),
++            _("Say “1 2 3” instead of “one hundred twenty-three”."),
++            self._switch("speak-numbers-as-digits"),
++        )
++        return page
++
++    def _build_captions(self) -> Gtk.Widget:
++        page = self._page(
++            _("Captions"),
++            _(
++                "Captions show everything the screen reader says as text, like subtitles on "
++                "television. They help people who are hard of hearing."
++            ),
++        )
++        card = self._section(page, "")
++        self._row(
++            card,
++            _("Show captions"),
++            _("The caption window never takes the keyboard focus."),
++            self._switch("captions-enabled"),
++        )
++
++        self._caption_preview = Gtk.Label(
++            label=_("This is how captions will look."), xalign=0, wrap=True
++        )
++        self._caption_preview.get_style_context().add_class("eduka-caption-preview")
++        self._caption_css = Gtk.CssProvider()
++        self._caption_preview.get_style_context().add_provider(
++            self._caption_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
++        )
++
++        card = self._section(page, _("Appearance"))
++        size = Gtk.SpinButton.new_with_range(12, 72, 2)
++        size.set_value(int(self._store.get("captions-font-size")))
++        size.connect(
++            "value-changed",
++            lambda w: (
++                self._changed("captions-font-size", w.get_value_as_int()),
++                self._update_caption_preview(),
++            ),
++        )
++        self._row(card, _("Text size"), _("Size of the caption text, in points."), size)
++
++        presets = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4)
++        presets.set_column_spacing(8)
++        presets.set_row_spacing(8)
++        for preset_id, foreground, background in backend.CAPTION_PRESETS:
++            button = Gtk.Button(label=_(CAPTION_PRESET_LABELS[preset_id]))
++            button.get_style_context().add_class("eduka-preset")
++            provider = Gtk.CssProvider()
++            provider.load_from_data(
++                f"button {{ background-image: none; background-color: {background}; "
++                f"color: {foreground}; }}".encode()
++            )
++            button.get_style_context().add_provider(
++                provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
++            )
++            button.connect("clicked", self._on_caption_preset, foreground, background)
++            presets.add(button)
++        self._row(
++            card,
++            _("Colours"),
++            _("Choose a colour combination that is easy to read."),
++            presets,
++            vertical=True,
++        )
++
++        self._fg_button = Gtk.ColorButton.new_with_rgba(
++            _rgba_from_hex(str(self._store.get("captions-foreground")))
++        )
++        self._fg_button.connect("color-set", self._on_caption_color, "captions-foreground")
++        self._row(card, _("Text colour"), "", self._fg_button)
++        self._bg_button = Gtk.ColorButton.new_with_rgba(
++            _rgba_from_hex(str(self._store.get("captions-background")))
++        )
++        self._bg_button.connect("color-set", self._on_caption_color, "captions-background")
++        self._row(card, _("Background colour"), "", self._bg_button)
++
++        card = self._section(page, _("Preview"))
++        row = Gtk.ListBoxRow(activatable=False)
++        row.add(self._caption_preview)
++        card.add(row)
++        self._update_caption_preview()
++        return page
++
++    def _build_reading(self) -> Gtk.Widget:
++        page = self._page(
++            _("Reading and typing"),
++            _("How much the screen reader says, and what it says while you type."),
++        )
++        card = self._section(page, _("Reading"))
++        self._row(
++            card,
++            _("Amount of detail"),
++            _("Brief says less about each item; detailed says more."),
++            self._combo("verbosity-level", VERBOSITY_LEVELS),
++        )
++        self._row(
++            card,
++            _("Tutorial messages"),
++            _("Explain how to use buttons, lists and other items."),
++            self._switch("speak-tutorial-messages"),
++        )
++        self._row(
++            card,
++            _("Read under the mouse"),
++            _("Read what is under the mouse pointer. Used after the next restart."),
++            self._switch("mouse-review"),
++        )
++
++        card = self._section(page, _("Keyboard"))
++        self._row(
++            card,
++            _("Keyboard layout"),
++            _("Choose Laptop if your keyboard has no Insert key."),
++            self._combo("keyboard-layout", KEYBOARD_LAYOUTS),
++        )
++        self._row(
++            card, _("Speak keys"), _("Say each key as you press it."), self._switch("key-echo")
++        )
++        self._row(
++            card,
++            _("Speak characters"),
++            _("Say each character as it is typed."),
++            self._switch("character-echo"),
++        )
++        self._row(
++            card, _("Speak words"), _("Say each word after you type it."), self._switch("word-echo")
++        )
++        self._row(
++            card,
++            _("Speak sentences"),
++            _("Say each sentence after you type it."),
++            self._switch("sentence-echo"),
++        )
++
++        card = self._section(page, _("Other output"))
++        self._row(
++            card,
++            _("Sounds"),
++            _("Play short sounds, for example for progress bars."),
++            self._switch("sound-enabled"),
++        )
++        self._row(
++            card,
++            _("Braille"),
++            _("Use a braille display if one is connected."),
++            self._switch("braille-enabled"),
++        )
++        return page
++
++    def _build_startup(self) -> Gtk.Widget:
++        page = self._page(
++            _("Startup"),
++            _("Choose when the screen reader starts and how it tells you it is on."),
++        )
++        card = self._section(page, _("Start at login"))
++        current = str(self._store.get("startup-mode"))
++        group: Gtk.RadioButton | None = None
++        for mode, title, description in STARTUP_MODES:
++            radio = Gtk.RadioButton.new_from_widget(group)
++            group = group or radio
++            texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
++            title_label = Gtk.Label(label=_(title), xalign=0)
++            title_label.get_style_context().add_class("eduka-row-title")
++            sub = Gtk.Label(label=_(description), xalign=0, wrap=True)
++            sub.get_style_context().add_class("eduka-row-subtitle")
++            texts.pack_start(title_label, False, False, 0)
++            texts.pack_start(sub, False, False, 0)
++            radio.add(texts)
++            radio.set_active(mode == current)
++            _set_accessible(radio, _(title), _(description))
++            radio.connect(
++                "toggled", lambda w, m=mode: w.get_active() and self._changed("startup-mode", m)
++            )
++            row = Gtk.ListBoxRow(activatable=False)
++            row.add(radio)
++            card.add(row)
++
++        card = self._section(page, _("When starting"))
++        delay = Gtk.SpinButton.new_with_range(0, 30, 1)
++        delay.set_value(int(self._store.get("start-delay")))
++        delay.connect("value-changed", lambda w: self._changed("start-delay", w.get_value_as_int()))
++        self._row(
++            card,
++            _("Wait before starting"),
++            _("Seconds to wait after login, so the desktop is ready first."),
++            delay,
++        )
++        self._row(
++            card,
++            _("Welcome message"),
++            _("Say and show “Eduka-Orca is ready” when it starts."),
++            self._switch("welcome-message"),
++        )
++        self._row(
++            card,
++            _("Notifications"),
++            _("Show a message on the screen when the screen reader is turned on or off."),
++            self._switch("show-notifications"),
++        )
++        return page
++
++    def _build_about(self) -> Gtk.Widget:
++        page = self._page(_("About"), "")
++        card = self._section(page, "")
++        version = Gtk.Label(label=VERSION, selectable=True)
++        self._row(
++            card,
++            "Eduka-Orca",
++            _("The Orca screen reader for Edukasaun OS, with slow speech and on-screen captions."),
++            version,
++        )
++
++        card = self._section(page, _("Keyboard shortcuts"))
++        for keys, description in SHORTCUTS:
++            key_label = Gtk.Label(label=keys)
++            key_label.get_style_context().add_class("eduka-row-title")
++            self._row(card, _(description), "", key_label)
++
++        card = self._section(page, _("Reset"))
++        reset = Gtk.Button(label=_("Reset all settings"))
++        reset.get_style_context().add_class("destructive-action")
++        reset.connect("clicked", self._on_reset_all)
++        self._row(
++            card,
++            _("Reset all settings"),
++            _("Go back to the Eduka-Orca defaults: English, slow speech and captions."),
++            reset,
++        )
++        licence = Gtk.Label(
++            label=_(
++                "Eduka-Orca is free software, licensed under the GNU LGPL 2.1 or later. "
++                "It is based on Orca by the GNOME Project."
++            ),
++            xalign=0,
++            wrap=True,
++        )
++        licence.get_style_context().add_class("eduka-page-intro")
++        page.pack_start(licence, False, False, 0)
++        return page
++
++    # --------------------------------------------------------------- behaviour
++
++    def _show_page(self, page_id: str) -> None:
++        if self._stack.get_child_by_name(page_id) is None:
++            page_id = "home"
++        self._current_page = page_id
++        self._stack.set_visible_child_name(page_id)
++        for row in self._sidebar.get_children():
++            if getattr(row, "page_id", None) == page_id:
++                self._sidebar.select_row(row)
++
++    def _on_sidebar_row_selected(self, _listbox: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
++        if row is not None:
++            self._current_page = row.page_id  # type: ignore[attr-defined]
++            self._stack.set_visible_child_name(self._current_page)
++
++    def _on_key_press(self, _window: Gtk.Window, event: Gdk.EventKey) -> bool:
++        """Ctrl+Page Up/Down moves between pages; Ctrl+Q and Escape close."""
++
++        ctrl = bool(event.state & Gdk.ModifierType.CONTROL_MASK)
++        ids = [page_id for page_id, _icon, _title in PAGES]
++        if ctrl and event.keyval in (Gdk.KEY_Page_Down, Gdk.KEY_Page_Up):
++            index = ids.index(self._current_page)
++            index += 1 if event.keyval == Gdk.KEY_Page_Down else -1
++            self._show_page(ids[index % len(ids)])
++            return True
++        if (ctrl and event.keyval == Gdk.KEY_q) or event.keyval == Gdk.KEY_Escape:
++            self.close()
++            return True
++        return False
++
++    def _changed(self, name: str, value: Any) -> None:
++        """Saves a setting (debounced) and applies it to the running screen reader."""
++
++        if self._updating:
++            return
++        self._pending[name] = value
++        self._updating = True
++        try:
++            for show in self._views.get(name, []):
++                show(value)
++        finally:
++            self._updating = False
++        if name in ("large-text", "high-contrast"):
++            self._store.set(name, value)
++            self._apply_window_style()
++        if self._save_source:
++            GLib.source_remove(self._save_source)
++        self._save_source = GLib.timeout_add(SAVE_DELAY_MS, self._flush)
++
++    def _flush(self) -> bool:
++        self._save_source = 0
++        pending, self._pending = self._pending, {}
++        for name, value in pending.items():
++            self._store.set(name, value)
++            if name in backend.RESTART_REQUIRED and self._orca_running:
++                self._restart_needed = True
++            elif self._orca_running:
++                self._controller.apply(backend.SETTINGS[name], value)
++        self._store.sync()
++        self._update_infobar()
++        return GLib.SOURCE_REMOVE
++
++    def _update_infobar(self) -> None:
++        if self._restart_needed and self._orca_running:
++            self._infobar_label.set_label(_("Restart the screen reader to use the new settings."))
++            self._infobar.show()
++            self._infobar.get_content_area().show_all()
++        else:
++            self._infobar.hide()
++
++    def _on_infobar_response(self, _infobar: Gtk.InfoBar, response: int) -> None:
++        if response == Gtk.ResponseType.APPLY:
++            self._flush()
++            self._controller.restart()
++        self._restart_needed = False
++        self._update_infobar()
++
++    def _on_language_toggled(self, radio: Gtk.RadioButton, code: str) -> None:
++        if not radio.get_active() or self._updating:
++            return
++        self._store.set("language", code)
++        self._store.sync()
++        if self._orca_running:
++            self._restart_needed = True
++        i18n.set_language(code)
++        # Rebuild after the toggle handler returns; the radio button is destroyed.
++        GLib.idle_add(self._rebuild)
++
++    def _rebuild(self) -> bool:
++        self._build()
++        return GLib.SOURCE_REMOVE
++
++    def _apply_window_style(self) -> None:
++        style = self.get_style_context()
++        for name, css_class in (
++            ("large-text", "eduka-large-text"),
++            ("high-contrast", "eduka-high-contrast"),
++        ):
++            if self._store.get(name):
++                style.add_class(css_class)
++            else:
++                style.remove_class(css_class)
++
++    def _on_toggle_clicked(self, _button: Gtk.Button) -> None:
++        if self._orca_running:
++            self._controller.turn_off()
++        else:
++            self._flush()
++            if not self._controller.turn_on():
++                self._show_error(_("The screen reader could not be started."))
++
++    def _on_test_voice(self, _button: Gtk.Button) -> None:
++        self._flush()
++        sample = _("Hello! This is how Eduka-Orca sounds at this speed.")
++        if self._orca_running and self._controller.present_message(sample):
++            return
++        language = i18n.VOICE_LANGUAGES.get(i18n.current_language(), "en")
++        if not backend.speak_sample(
++            sample,
++            language,
++            int(self._store.get("rate")),
++            float(self._store.get("pitch")),
++            float(self._store.get("volume")),
++        ):
++            self._show_error(_("No speech is available. Please install speech-dispatcher."))
++
++    def _on_reset_voice(self, _button: Gtk.Button) -> None:
++        for name in ("rate", "pitch", "volume"):
++            self._store.reset(name)
++            if self._orca_running:
++                self._controller.apply(backend.SETTINGS[name], self._store.get(name))
++        self._store.sync()
++        self._build()
++
++    def _on_caption_preset(self, _button: Gtk.Button, foreground: str, background: str) -> None:
++        self._updating = True
++        self._fg_button.set_rgba(_rgba_from_hex(foreground))
++        self._bg_button.set_rgba(_rgba_from_hex(background))
++        self._updating = False
++        self._changed("captions-foreground", foreground)
++        self._changed("captions-background", background)
++        self._update_caption_preview()
++
++    def _on_caption_color(self, button: Gtk.ColorButton, name: str) -> None:
++        self._changed(name, _hex_from_rgba(button.get_rgba()))
++        self._update_caption_preview()
++
++    def _update_caption_preview(self) -> None:
++        def value(name: str) -> Any:
++            return self._pending.get(name, self._store.get(name))
++
++        css = (
++            f"label {{ font-size: {int(value('captions-font-size'))}pt; "
++            f"color: {value('captions-foreground')}; "
++            f"background-color: {value('captions-background')}; }}"
++        )
++        self._caption_css.load_from_data(css.encode())
++
++    def _on_reset_all(self, _button: Gtk.Button) -> None:
++        dialog = Gtk.MessageDialog(
++            transient_for=self,
++            modal=True,
++            message_type=Gtk.MessageType.QUESTION,
++            buttons=Gtk.ButtonsType.NONE,
++            text=_("Reset all settings?"),
++        )
++        dialog.format_secondary_text(_("All Eduka-Orca settings will go back to their defaults."))
++        dialog.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
++        dialog.add_button(_("Reset"), Gtk.ResponseType.OK)
++        dialog.set_default_response(Gtk.ResponseType.CANCEL)
++        response = dialog.run()
++        dialog.destroy()
++        if response != Gtk.ResponseType.OK:
++            return
++        for name in backend.SETTINGS:
++            if name != "screen-reader-enabled":
++                self._store.reset(name)
++        self._store.sync()
++        i18n.set_language(str(self._store.get("language")))
++        if self._orca_running:
++            self._restart_needed = True
++        self._apply_window_style()
++        self._build()
++
++    def _show_error(self, text: str) -> None:
++        dialog = Gtk.MessageDialog(
++            transient_for=self,
++            modal=True,
++            message_type=Gtk.MessageType.ERROR,
++            buttons=Gtk.ButtonsType.CLOSE,
++            text=text,
++        )
++        dialog.run()
++        dialog.destroy()
++
++    def _refresh_status(self) -> None:
++        for update in self._status_widgets:
++            update()
++
++    def _on_orca_appeared(self, *_args: Any) -> None:
++        self._orca_running = True
++        self._refresh_status()
++        self._update_infobar()
++
++    def _on_orca_vanished(self, *_args: Any) -> None:
++        self._orca_running = False
++        self._restart_needed = False
++        self._refresh_status()
++        self._update_infobar()
++
++    def _on_destroy(self, _window: Gtk.Window) -> None:
++        if self._save_source:
++            GLib.source_remove(self._save_source)
++            self._flush()
++        Gio.bus_unwatch_name(self._watch_id)
++
++
++class SettingsApplication(Gtk.Application):
++    """Single-instance application: a second launch raises the existing window."""
++
++    def __init__(self) -> None:
++        super().__init__(
++            application_id=APPLICATION_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE
++        )
++        self._window: SettingsWindow | None = None
++        self._start_page = "home"
++        self.add_main_option(
++            "page",
++            ord("p"),
++            GLib.OptionFlags.NONE,
++            GLib.OptionArg.STRING,
++            "Page to open: home, language, speech, captions, reading, startup or about",
++            "PAGE",
++        )
++
++    def do_startup(self) -> None:  # pylint: disable=arguments-differ
++        Gtk.Application.do_startup(self)
++        provider = Gtk.CssProvider()
++        provider.load_from_data(CSS)
++        screen = Gdk.Screen.get_default()
++        if screen is not None:
++            Gtk.StyleContext.add_provider_for_screen(
++                screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
++            )
++
++    def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
++        # pylint: disable=arguments-differ
++        options = command_line.get_options_dict().end().unpack()
++        if "page" in options:
++            self._start_page = options["page"]
++        self.activate()
++        return 0
++
++    def do_activate(self) -> None:  # pylint: disable=arguments-differ
++        if self._window is None:
++            store = backend.SettingsStore()
++            i18n.set_language(str(store.get("language")))
++            self._window = SettingsWindow(self, store, backend.OrcaController(), self._start_page)
++        else:
++            self._window._show_page(self._start_page)  # pylint: disable=protected-access
++        self._window.present()
++
++
++def main(argv: list[str] | None = None) -> int:
++    """Runs Eduka-Orca Settings."""
++
++    return SettingsApplication().run(argv if argv is not None else sys.argv)
+diff --git a/eduka/settings/eduka_orca_settings/backend.py b/eduka/settings/eduka_orca_settings/backend.py
+new file mode 100644
+index 0000000..776ed7a
+--- /dev/null
++++ b/eduka/settings/eduka_orca_settings/backend.py
+@@ -0,0 +1,577 @@
++# Eduka-Orca Settings
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""Reads and writes Eduka-Orca and Orca settings, and controls the running screen reader.
++
++Nothing here imports GTK, so it can be unit tested without a display.
++
++Settings are saved in GSettings (dconf), where Orca reads them:
++
++* Eduka-Orca's own settings live in ``org.edukasaun.EdukaOrca``.
++* Orca's settings live in its relocatable schemas under ``/org/gnome/orca/default/``
++  (the "default" profile, which is the only profile Orca starts with).
++
++When Orca is running, every change is also sent to it over D-Bus
++(``org.gnome.Orca.Service``) so that it takes effect immediately.
++"""
++
++from __future__ import annotations
++
++import shutil
++import subprocess
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Any
++
++from gi.repository import Gio, GLib
++
++if TYPE_CHECKING:
++    from collections.abc import Callable
++
++EDUKA_SCHEMA = "org.edukasaun.EdukaOrca"
++A11Y_SCHEMA = "org.gnome.desktop.a11y.applications"
++ORCA_PROFILE_PATH = "/org/gnome/orca/default/"
++
++ORCA_BUS_NAME = "org.gnome.Orca.Service"
++ORCA_OBJECT_PATH = "/org/gnome/Orca/Service"
++ORCA_SERVICE_INTERFACE = "org.gnome.Orca.Service"
++ORCA_MODULE_INTERFACE = "org.gnome.Orca.Module"
++DBUS_TIMEOUT_MS = 2000
++
++# Values used by Eduka-Orca when nothing else is set (see src/orca/eduka_defaults.py).
++DEFAULT_RATE = 30
++DEFAULT_PITCH = 4.5
++DEFAULT_VOLUME = 10.0
++
++# Speech-rate presets shown as buttons next to the speed slider.
++RATE_PRESETS: tuple[tuple[str, int], ...] = (
++    ("very-slow", 20),
++    ("slow", DEFAULT_RATE),
++    ("normal", 50),
++    ("fast", 65),
++)
++
++# Caption colour presets: (id, text colour, background colour).
++CAPTION_PRESETS: tuple[tuple[str, str, str], ...] = (
++    ("yellow-on-black", "#ffff00", "#000000"),
++    ("white-on-black", "#ffffff", "#000000"),
++    ("black-on-white", "#000000", "#ffffff"),
++    ("black-on-yellow", "#000000", "#ffff00"),
++)
++
++
++@dataclass(frozen=True)
++class Setting:
++    """One setting shown in Eduka-Orca Settings."""
++
++    name: str
++    schema: str
++    key: str
++    gtype: str  # GVariant type of the key: b, i, d or s (enums are s)
++    default: Any
++    path: str | None = None  # None for non-relocatable schemas
++    dbus_module: str | None = None  # Orca D-Bus module that can apply it live
++    dbus_setter: str | None = None
++    to_dbus: Callable[[Any], tuple[str, Any]] | None = None  # (variant type, value)
++
++    def dbus_value(self, value: Any) -> tuple[str, Any]:
++        """Returns the (GVariant type, value) sent to Orca's runtime setter."""
++
++        if self.to_dbus is not None:
++            return self.to_dbus(value)
++        return self.gtype, value
++
++
++def _orca(schema_name: str) -> str:
++    return f"{ORCA_PROFILE_PATH}{schema_name}/"
++
++
++_VOICE_PATH = f"{ORCA_PROFILE_PATH}voices/default/"
++
++SETTINGS: dict[str, Setting] = {
++    setting.name: setting
++    for setting in (
++        # Eduka-Orca's own settings.
++        Setting("language", EDUKA_SCHEMA, "language", "s", "en"),
++        Setting("startup-mode", EDUKA_SCHEMA, "startup-mode", "s", "remember"),
++        Setting("start-delay", EDUKA_SCHEMA, "start-delay", "i", 2),
++        Setting("show-notifications", EDUKA_SCHEMA, "show-notifications", "b", True),
++        Setting("welcome-message", EDUKA_SCHEMA, "welcome-message", "b", True),
++        Setting("large-text", EDUKA_SCHEMA, "large-text", "b", False),
++        Setting("high-contrast", EDUKA_SCHEMA, "high-contrast", "b", False),
++        # Voice.
++        Setting(
++            "rate",
++            "org.gnome.Orca.Voice",
++            "rate",
++            "i",
++            DEFAULT_RATE,
++            _VOICE_PATH,
++            "SpeechManager",
++            "Rate",
++        ),
++        Setting(
++            "pitch",
++            "org.gnome.Orca.Voice",
++            "pitch",
++            "d",
++            DEFAULT_PITCH,
++            _VOICE_PATH,
++            "SpeechManager",
++            "Pitch",
++        ),
++        Setting(
++            "volume",
++            "org.gnome.Orca.Voice",
++            "volume",
++            "d",
++            DEFAULT_VOLUME,
++            _VOICE_PATH,
++            "SpeechManager",
++            "Volume",
++        ),
++        Setting(
++            "speech-enabled",
++            "org.gnome.Orca.Speech",
++            "enable",
++            "b",
++            True,
++            _orca("speech"),
++            "SpeechManager",
++            "SpeechIsEnabled",
++        ),
++        Setting(
++            "punctuation-level",
++            "org.gnome.Orca.Speech",
++            "punctuation-level",
++            "s",
++            "most",
++            _orca("speech"),
++            "SpeechManager",
++            "PunctuationLevel",
++        ),
++        Setting(
++            "capitalization-style",
++            "org.gnome.Orca.Speech",
++            "capitalization-style",
++            "s",
++            "none",
++            _orca("speech"),
++            "SpeechManager",
++            "CapitalizationStyle",
++        ),
++        Setting(
++            "verbosity-level",
++            "org.gnome.Orca.Speech",
++            "verbosity-level",
++            "s",
++            "verbose",
++            _orca("speech"),
++            "SpeechPresenter",
++            "VerbosityLevel",
++        ),
++        Setting(
++            "speak-numbers-as-digits",
++            "org.gnome.Orca.Speech",
++            "speak-numbers-as-digits",
++            "b",
++            False,
++            _orca("speech"),
++            "SpeechManager",
++            "SpeakNumbersAsDigits",
++        ),
++        Setting(
++            "speak-tutorial-messages",
++            "org.gnome.Orca.Speech",
++            "speak-tutorial-messages",
++            "b",
++            True,
++            _orca("speech"),
++            "SpeechPresenter",
++            "SpeakTutorialMessages",
++        ),
++        Setting(
++            "auto-language-switching",
++            "org.gnome.Orca.Speech",
++            "auto-language-switching",
++            "b",
++            True,
++            _orca("speech"),
++            "SpeechManager",
++            "AutoLanguageSwitching",
++        ),
++        # On-screen captions (Orca's speech monitor).
++        Setting(
++            "captions-enabled",
++            "org.gnome.Orca.Speech",
++            "monitor-enabled",
++            "b",
++            True,
++            _orca("speech"),
++            "SpeechPresenter",
++            "MonitorIsEnabled",
++        ),
++        Setting(
++            "captions-font-size",
++            "org.gnome.Orca.Speech",
++            "monitor-font-size",
++            "i",
++            24,
++            _orca("speech"),
++            "SpeechPresenter",
++            "MonitorFontSize",
++        ),
++        Setting(
++            "captions-foreground",
++            "org.gnome.Orca.Speech",
++            "monitor-foreground",
++            "s",
++            "#ffff00",
++            _orca("speech"),
++            "SpeechPresenter",
++            "MonitorForeground",
++        ),
++        Setting(
++            "captions-background",
++            "org.gnome.Orca.Speech",
++            "monitor-background",
++            "s",
++            "#000000",
++            _orca("speech"),
++            "SpeechPresenter",
++            "MonitorBackground",
++        ),
++        # Keyboard and typing.
++        Setting(
++            "keyboard-layout",
++            "org.gnome.Orca.Keybindings",
++            "keyboard-layout",
++            "s",
++            "desktop",
++            _orca("keybindings"),
++            "CommandManager",
++            "KeyboardLayoutIsDesktop",
++            lambda value: ("b", value == "desktop"),
++        ),
++        Setting(
++            "key-echo",
++            "org.gnome.Orca.TypingEcho",
++            "key-echo",
++            "b",
++            True,
++            _orca("typing-echo"),
++            "TypingEchoPresenter",
++            "KeyEchoEnabled",
++        ),
++        Setting(
++            "character-echo",
++            "org.gnome.Orca.TypingEcho",
++            "character-echo",
++            "b",
++            False,
++            _orca("typing-echo"),
++            "TypingEchoPresenter",
++            "CharacterEchoEnabled",
++        ),
++        Setting(
++            "word-echo",
++            "org.gnome.Orca.TypingEcho",
++            "word-echo",
++            "b",
++            False,
++            _orca("typing-echo"),
++            "TypingEchoPresenter",
++            "WordEchoEnabled",
++        ),
++        Setting(
++            "sentence-echo",
++            "org.gnome.Orca.TypingEcho",
++            "sentence-echo",
++            "b",
++            False,
++            _orca("typing-echo"),
++            "TypingEchoPresenter",
++            "SentenceEchoEnabled",
++        ),
++        # Other output.
++        Setting(
++            "mouse-review",
++            "org.gnome.Orca.MouseReview",
++            "enabled",
++            "b",
++            False,
++            _orca("mouse-review"),
++        ),
++        Setting(
++            "sound-enabled",
++            "org.gnome.Orca.Sound",
++            "enabled",
++            "b",
++            True,
++            _orca("sound"),
++            "SoundPresenter",
++            "SoundIsEnabled",
++        ),
++        Setting(
++            "braille-enabled",
++            "org.gnome.Orca.Braille",
++            "enabled",
++            "b",
++            True,
++            _orca("braille"),
++            "BraillePresenter",
++            "BrailleIsEnabled",
++        ),
++        # The desktop-wide "screen reader on" switch; Eduka-Orca uses it to remember the
++        # on/off state between sessions.
++        Setting("screen-reader-enabled", A11Y_SCHEMA, "screen-reader-enabled", "b", False),
++    )
++}
++
++# Settings that only take effect after the screen reader is restarted.
++RESTART_REQUIRED = frozenset({"language", "mouse-review"})
++
++
++class SettingsStore:
++    """Reads and writes settings in GSettings, falling back to memory if a schema is missing.
++
++    The fallback keeps the window usable on a development machine where the schemas are
++    not installed; :attr:`missing_schemas` tells the window to warn that nothing is saved.
++    """
++
++    def __init__(self, source: Gio.SettingsSchemaSource | None = None) -> None:
++        self._source = source if source is not None else Gio.SettingsSchemaSource.get_default()
++        self._gsettings: dict[tuple[str, str | None], Gio.Settings | None] = {}
++        self._memory: dict[str, Any] = {}
++        self.missing_schemas: set[str] = set()
++
++    def _settings_for(self, setting: Setting) -> Gio.Settings | None:
++        cache_key = (setting.schema, setting.path)
++        if cache_key in self._gsettings:
++            return self._gsettings[cache_key]
++
++        gsettings = None
++        schema = self._source.lookup(setting.schema, True) if self._source else None
++        if schema is None or not schema.has_key(setting.key):
++            self.missing_schemas.add(setting.schema)
++        else:
++            gsettings = Gio.Settings.new_full(schema, None, setting.path)
++        self._gsettings[cache_key] = gsettings
++        return gsettings
++
++    def get(self, name: str) -> Any:
++        """Returns the current value of the named setting."""
++
++        setting = SETTINGS[name]
++        gsettings = self._settings_for(setting)
++        if gsettings is None:
++            return self._memory.get(name, setting.default)
++        return gsettings.get_value(setting.key).unpack()
++
++    def set(self, name: str, value: Any) -> None:
++        """Saves the named setting."""
++
++        setting = SETTINGS[name]
++        value = coerce(setting, value)
++        gsettings = self._settings_for(setting)
++        if gsettings is None:
++            self._memory[name] = value
++            return
++        gsettings.set_value(setting.key, GLib.Variant(setting.gtype, value))
++        if setting.schema == "org.gnome.Orca.Voice":
++            # Orca marks voices the user has customised as "established".
++            gsettings.set_boolean("established", True)
++
++    def reset(self, name: str) -> None:
++        """Returns the named setting to its default (the schema or vendor default)."""
++
++        setting = SETTINGS[name]
++        gsettings = self._settings_for(setting)
++        if gsettings is None:
++            self._memory.pop(name, None)
++        else:
++            gsettings.reset(setting.key)
++
++    def sync(self) -> None:
++        """Writes pending changes to disk."""
++
++        Gio.Settings.sync()
++
++
++def coerce(setting: Setting, value: Any) -> Any:
++    """Converts a widget value into the type stored in GSettings."""
++
++    if setting.gtype == "b":
++        return bool(value)
++    if setting.gtype == "i":
++        return round(float(value))
++    if setting.gtype == "d":
++        return round(float(value), 2)
++    return str(value)
++
++
++def rate_to_speech_dispatcher(rate: int) -> int:
++    """Converts Orca's 0-100 rate to speech-dispatcher's -100..100 (as Orca does)."""
++
++    return max(-100, min(100, 2 * int(rate) - 100))
++
++
++def pitch_to_speech_dispatcher(pitch: float) -> int:
++    """Converts Orca's 0-10 pitch to speech-dispatcher's -100..100 (as Orca does)."""
++
++    return int(20 * max(0.0, min(9.0, float(pitch))) - 90)
++
++
++class OrcaController:
++    """Starts, stops and talks to the running Orca."""
++
++    def __init__(self, connection: Gio.DBusConnection | None = None) -> None:
++        self._connection = connection
++        if self._connection is None:
++            try:
++                self._connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
++            except GLib.Error:
++                self._connection = None
++
++    def _call(
++        self,
++        object_path: str,
++        interface: str,
++        method: str,
++        parameters: GLib.Variant | None,
++        reply_type: str | None = None,
++    ) -> GLib.Variant | None:
++        if self._connection is None:
++            return None
++        try:
++            return self._connection.call_sync(
++                ORCA_BUS_NAME,
++                object_path,
++                interface,
++                method,
++                parameters,
++                GLib.VariantType(reply_type) if reply_type else None,
++                Gio.DBusCallFlags.NO_AUTO_START,
++                DBUS_TIMEOUT_MS,
++                None,
++            )
++        except GLib.Error:
++            return None
++
++    def is_running(self) -> bool:
++        """Returns True if Orca's D-Bus service is on the session bus."""
++
++        if self._connection is None:
++            return False
++        try:
++            reply = self._connection.call_sync(
++                "org.freedesktop.DBus",
++                "/org/freedesktop/DBus",
++                "org.freedesktop.DBus",
++                "NameHasOwner",
++                GLib.Variant("(s)", (ORCA_BUS_NAME,)),
++                GLib.VariantType("(b)"),
++                Gio.DBusCallFlags.NONE,
++                DBUS_TIMEOUT_MS,
++                None,
++            )
++        except GLib.Error:
++            return False
++        return bool(reply.unpack()[0])
++
++    def apply(self, setting: Setting, value: Any) -> bool:
++        """Applies a setting to the running Orca. Returns True if Orca accepted it."""
++
++        if not setting.dbus_module or not setting.dbus_setter:
++            return False
++        vtype, dbus_value = setting.dbus_value(coerce(setting, value))
++        reply = self._call(
++            f"{ORCA_OBJECT_PATH}/{setting.dbus_module}",
++            ORCA_MODULE_INTERFACE,
++            "ExecuteRuntimeSetter",
++            GLib.Variant("(sv)", (setting.dbus_setter, GLib.Variant(vtype, dbus_value))),
++        )
++        return bool(reply is not None and reply.unpack() and reply.unpack()[0])
++
++    def present_message(self, message: str) -> bool:
++        """Asks Orca to speak (and caption) a message."""
++
++        reply = self._call(
++            ORCA_OBJECT_PATH,
++            ORCA_SERVICE_INTERFACE,
++            "PresentMessage",
++            GLib.Variant("(s)", (message,)),
++        )
++        return reply is not None
++
++    def show_orca_preferences(self) -> bool:
++        """Opens Orca's own (advanced) preferences dialog."""
++
++        if self._call(ORCA_OBJECT_PATH, ORCA_SERVICE_INTERFACE, "ShowPreferences", None):
++            return True
++        return _spawn(["eduka-orca", "--replace", "--setup"])
++
++    @staticmethod
++    def turn_on() -> bool:
++        """Starts Eduka-Orca and remembers that it is on."""
++
++        return _spawn(["eduka-orca-toggle", "--on"])
++
++    @staticmethod
++    def turn_off() -> bool:
++        """Stops Eduka-Orca and remembers that it is off."""
++
++        return _spawn(["eduka-orca-toggle", "--off"])
++
++    @staticmethod
++    def restart() -> bool:
++        """Restarts Eduka-Orca so that settings such as the language take effect."""
++
++        return _spawn(["eduka-orca-toggle", "--restart"])
++
++
++def _spawn(argv: list[str]) -> bool:
++    if shutil.which(argv[0]) is None:
++        return False
++    try:
++        subprocess.Popen(  # pylint: disable=consider-using-with
++            argv,
++            stdin=subprocess.DEVNULL,
++            stdout=subprocess.DEVNULL,
++            stderr=subprocess.DEVNULL,
++            start_new_session=True,
++        )
++    except OSError:
++        return False
++    return True
++
++
++def speak_sample(text: str, language: str, rate: int, pitch: float, volume: float) -> bool:
++    """Speaks text with speech-dispatcher directly (used when Orca is not running)."""
++
++    if shutil.which("spd-say") is None:
++        return False
++    argv = [
++        "spd-say",
++        "--wait",
++        "-l",
++        language,
++        "-r",
++        str(rate_to_speech_dispatcher(rate)),
++        "-p",
++        str(pitch_to_speech_dispatcher(pitch)),
++        "-i",
++        str(int(15 * max(0.0, min(9.0, float(volume))) - 35)),
++        text,
++    ]
++    return _spawn(argv)
+diff --git a/eduka/settings/eduka_orca_settings/i18n.py b/eduka/settings/eduka_orca_settings/i18n.py
+new file mode 100644
+index 0000000..11bc3f6
+--- /dev/null
++++ b/eduka/settings/eduka_orca_settings/i18n.py
+@@ -0,0 +1,117 @@
++# Eduka-Orca Settings
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""Translations for Eduka-Orca Settings.
++
++The source strings are English, which is also the default language. Translations
++live in eduka/po/<language>.po (gettext domain "eduka-orca"). The window's
++language is the one chosen in the Language page, not the desktop locale, so that
++it can be switched without logging out.
++"""
++
++from __future__ import annotations
++
++import gettext
++import locale
++import os
++
++DOMAIN = "eduka-orca"
++DEFAULT_LANGUAGE = "en"
++
++# Language codes in the order they are offered, with their names written in the
++# language itself (so that a user can always find their own language).
++LANGUAGES: tuple[tuple[str, str], ...] = (
++    ("en", "English"),
++    ("pt", "Português"),
++    ("id", "Bahasa Indonesia"),
++    ("tet", "Tetun"),
++)
++
++# Voice used to speak each language. eSpeak NG has no Tetum voice; Tetum spelling is
++# Portuguese-based, so a European Portuguese voice is the closest match.
++VOICE_LANGUAGES: dict[str, str] = {"en": "en", "pt": "pt-PT", "id": "id", "tet": "pt-PT"}
++
++# Gettext fallback chain for each language: Tetum falls back to Portuguese, which
++# Tetum speakers read, rather than straight to English.
++_FALLBACKS: dict[str, list[str]] = {
++    "en": ["en"],
++    "pt": ["pt", "pt_BR"],
++    "id": ["id"],
++    "tet": ["tet", "pt", "pt_BR"],
++}
++
++
++class _State:  # pylint: disable=too-few-public-methods
++    """The translation in use."""
++
++    localedir: str | None = None
++    translation: gettext.NullTranslations = gettext.NullTranslations()
++    language: str = DEFAULT_LANGUAGE
++
++
++def set_localedir(path: str | None) -> None:
++    """Sets where the compiled .mo files are installed (e.g. /usr/share/locale)."""
++
++    _State.localedir = path
++
++
++def system_language() -> str:
++    """Returns the supported language that matches the desktop locale, or English."""
++
++    for variable in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
++        for value in os.environ.get(variable, "").split(":"):
++            code = value.split(".")[0].split("_")[0].split("@")[0].lower()
++            if code in _FALLBACKS:
++                return code
++    try:
++        code = (locale.getlocale(locale.LC_MESSAGES)[0] or "").split("_")[0].lower()
++    except (AttributeError, ValueError):
++        code = ""
++    return code if code in _FALLBACKS else DEFAULT_LANGUAGE
++
++
++def resolve(language: str) -> str:
++    """Turns a stored language value ("system" included) into a supported language code."""
++
++    if language == "system":
++        return system_language()
++    return language if language in _FALLBACKS else DEFAULT_LANGUAGE
++
++
++def set_language(language: str) -> str:
++    """Switches the translation used by _(). Returns the language code now in use."""
++
++    _State.language = resolve(language)
++    _State.translation = gettext.translation(
++        DOMAIN, _State.localedir, languages=_FALLBACKS[_State.language], fallback=True
++    )
++    return _State.language
++
++
++def current_language() -> str:
++    """Returns the language code in use."""
++
++    return _State.language
++
++
++def _(message: str) -> str:
++    """Translates message into the current language."""
++
++    return _State.translation.gettext(message)
++
++
++def N_(message: str) -> str:  # pylint: disable=invalid-name
++    """Marks message for translation without translating it yet."""
++
++    return message
+diff --git a/eduka/xdg/eduka-orca-settings.desktop b/eduka/xdg/eduka-orca-settings.desktop
+new file mode 100644
+index 0000000..70450c2
+--- /dev/null
++++ b/eduka/xdg/eduka-orca-settings.desktop
+@@ -0,0 +1,26 @@
++[Desktop Entry]
++Type=Application
++Name=Eduka-Orca Settings
++Name[id]=Pengaturan Eduka-Orca
++Name[pt]=Definições do Eduka-Orca
++Name[pt_BR]=Configurações do Eduka-Orca
++Name[tet]=Konfigurasaun Eduka-Orca
++GenericName=Screen Reader Settings
++GenericName[id]=Pengaturan Pembaca Layar
++GenericName[pt]=Definições do Leitor de Ecrã
++GenericName[pt_BR]=Configurações do Leitor de Tela
++GenericName[tet]=Konfigurasaun Leitór Ekrã
++Comment=Language, speech speed, captions and startup of the Eduka-Orca screen reader
++Comment[id]=Bahasa, kecepatan ucapan, teks di layar, dan saat mulai pembaca layar Eduka-Orca
++Comment[pt]=Língua, velocidade da fala, legendas e arranque do leitor de ecrã Eduka-Orca
++Comment[pt_BR]=Idioma, velocidade da fala, legendas e inicialização do leitor de tela Eduka-Orca
++Comment[tet]=Lian, velosidade ko'alia, legenda no hahú leitór ekrã Eduka-Orca nian
++Exec=eduka-orca-settings
++Icon=orca
++Terminal=false
++StartupNotify=true
++Categories=Settings;Accessibility;
++Keywords=screen reader;accessibility;speech;speed;language;captions;startup;orca;eduka;
++Keywords[id]=pembaca layar;aksesibilitas;ucapan;kecepatan;bahasa;teks;orca;eduka;
++Keywords[pt]=leitor de ecrã;acessibilidade;fala;velocidade;língua;legendas;orca;eduka;
++Keywords[tet]=leitór ekrã;asesibilidade;ko'alia;velosidade;lian;legenda;orca;eduka;
+diff --git a/eduka/xdg/eduka-orca.desktop b/eduka/xdg/eduka-orca.desktop
+index 069a686..8912bed 100644
+--- a/eduka/xdg/eduka-orca.desktop
++++ b/eduka/xdg/eduka-orca.desktop
+@@ -10,7 +10,7 @@ Comment=Screen reader with slow speech and on-screen captions (turn on/off)
+ Comment[id]=Pembaca layar dengan ucapan pelan dan teks di layar (nyalakan/matikan)
+ Comment[pt]=Leitor de ecrã com fala lenta e legendas no ecrã (ligar/desligar)
+ Comment[pt_BR]=Leitor de tela com fala lenta e legendas na tela (ligar/desligar)
+-Comment[tet]=Leitór ekrã ho lian neineik no legenda iha ekrã (liga/mate)
++Comment[tet]=Leitór ekrã ho ko'alia neineik no legenda iha ekrã (liga/mate)
+ Exec=eduka-orca-toggle
+ Icon=orca
+ Terminal=false
+@@ -18,11 +18,20 @@ Categories=Utility;Accessibility;
+ Keywords=screen reader;accessibility;speech;captions;blind;hearing;orca;eduka;
+ Keywords[id]=pembaca layar;aksesibilitas;suara;teks;tunanetra;tunarungu;orca;eduka;
+ Keywords[pt]=leitor de ecrã;acessibilidade;fala;legendas;orca;eduka;
+-Actions=Preferences;
++Keywords[tet]=leitór ekrã;asesibilidade;ko'alia;legenda;orca;eduka;
++Actions=Settings;Restart;
+ 
+-[Desktop Action Preferences]
+-Name=Preferences
++[Desktop Action Settings]
++Name=Settings
+ Name[id]=Pengaturan
+-Name[pt]=Preferências
+-Name[tet]=Preferénsia
+-Exec=eduka-orca --replace --setup
++Name[pt]=Definições
++Name[pt_BR]=Configurações
++Name[tet]=Konfigurasaun
++Exec=eduka-orca-settings
++
++[Desktop Action Restart]
++Name=Restart
++Name[id]=Mulai ulang
++Name[pt]=Reiniciar
++Name[tet]=Hahú fali
++Exec=eduka-orca-toggle --restart
+diff --git a/po/LINGUAS b/po/LINGUAS
+index d01657c..87a1008 100644
+--- a/po/LINGUAS
++++ b/po/LINGUAS
+@@ -74,6 +74,7 @@ sr@latin
+ sv
+ ta
+ te
++tet
+ tg
+ th
+ tr
+diff --git a/po/tet.po b/po/tet.po
+new file mode 100644
+index 0000000..88268a5
+--- /dev/null
++++ b/po/tet.po
+@@ -0,0 +1,22 @@
++# Tetum translation of Orca (Eduka-Orca).
++# Copyright (C) 2026 Edukasaun OS
++# This file is distributed under the same license as the orca package.
++#
++# Only the Eduka-Orca strings are translated so far. Eduka-Orca runs Orca with
++# LANGUAGE=tet:pt, so every string missing here is shown in Portuguese.
++msgid ""
++msgstr ""
++"Project-Id-Version: orca 50.3+eduka2\n"
++"Report-Msgid-Bugs-To: https://github.com/hugomonizdorego/Eduka-Orca/issues\n"
++"PO-Revision-Date: 2026-10-01 00:00+0900\n"
++"Last-Translator: Edukasaun OS <hugomonizdorego@angelinojoana.com>\n"
++"Language-Team: Tetum\n"
++"Language: tet\n"
++"MIME-Version: 1.0\n"
++"Content-Type: text/plain; charset=UTF-8\n"
++"Content-Transfer-Encoding: 8bit\n"
++"Plural-Forms: nplurals=2; plural=(n != 1);\n"
++
++#. Eduka-Orca
++msgid "Show captions of speech on screen"
++msgstr "Hatudu legenda ko'alia nian iha ekrã"
+diff --git a/src/orca/eduka_defaults.py b/src/orca/eduka_defaults.py
+index ba6e4cf..1513f79 100644
+--- a/src/orca/eduka_defaults.py
++++ b/src/orca/eduka_defaults.py
+@@ -34,6 +34,8 @@ checks that they stay in sync with the values below.
+ 
+ from __future__ import annotations
+ 
++import os
++
+ # Speech rate on Orca's 0-100 scale (upstream default: 50).
+ # Speech-dispatcher receives 2 * rate - 100, so 30 becomes -40.
+ DEFAULT_RATE: int = 30
+@@ -81,3 +83,29 @@ def map_speech_language(language: str, dialect: str) -> tuple[str, str]:
+     """Returns (language, dialect), replaced by a fallback voice language when needed."""
+ 
+     return SPEECH_LANGUAGE_FALLBACKS.get((language or "").lower(), (language, dialect))
++
++
++# Languages offered by Eduka-Orca Settings. English is the default; Tetum, Portuguese
++# and Indonesian are the languages of Timor-Leste and its neighbours.
++SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "pt", "id", "tet")
++DEFAULT_LANGUAGE: str = "en"
++
++# Locale (language, territory) used for each supported language.
++LANGUAGE_LOCALES: dict[str, tuple[str, str]] = {
++    "en": ("en", "US"),
++    "pt": ("pt", "PT"),
++    "id": ("id", "ID"),
++    "tet": ("tet", "TL"),
++}
++
++# The eduka-orca launcher exports the language chosen in Eduka-Orca Settings in this
++# variable. It decides the voice language even when the matching system locale is not
++# installed (Orca otherwise takes the voice language from the locale).
++LANGUAGE_ENVIRONMENT_VARIABLE: str = "EDUKA_ORCA_LANGUAGE"
++
++
++def get_language_override() -> tuple[str, str] | None:
++    """Returns the (language, territory) chosen in Eduka-Orca Settings, or None."""
++
++    code = os.environ.get(LANGUAGE_ENVIRONMENT_VARIABLE, "").strip().lower()
++    return LANGUAGE_LOCALES.get(code)
+diff --git a/src/orca/speechdispatcherfactory.py b/src/orca/speechdispatcherfactory.py
+index 5be9e73..3c6ec19 100644
+--- a/src/orca/speechdispatcherfactory.py
++++ b/src/orca/speechdispatcherfactory.py
+@@ -277,6 +277,10 @@ class SpeechServer(speechserver.SpeechServer):
+         language = acss_family.get(speechserver.VoiceFamily.LANG)
+         dialect = acss_family.get(speechserver.VoiceFamily.DIALECT)
+ 
++        if not language and (override := eduka_defaults.get_language_override()):
++            # Eduka-Orca: speak in the language chosen in Eduka-Orca Settings.
++            language, dialect = override
++
+         if not language:
+             family_locale, _encoding = locale.getlocale()
+ 
+@@ -473,6 +477,9 @@ class SpeechServer(speechserver.SpeechServer):
+         """Returns the default language string based on the current locale and available voices."""
+ 
+         current_locale = locale.getlocale(locale.LC_MESSAGES)[0]
++        if override := eduka_defaults.get_language_override():
++            # Eduka-Orca: speak in the language chosen in Eduka-Orca Settings.
++            current_locale = "_".join(override)
+         if current_locale is None or "_" not in current_locale:
+             return ""
+ 
+diff --git a/tests/unit_tests/test_eduka_settings.py b/tests/unit_tests/test_eduka_settings.py
+new file mode 100644
+index 0000000..7be19ed
+--- /dev/null
++++ b/tests/unit_tests/test_eduka_settings.py
+@@ -0,0 +1,328 @@
++# Eduka-Orca
++#
++# Copyright 2026 Edukasaun OS
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++"""Checks Eduka-Orca Settings: schemas, Orca setters, translations and helper scripts."""
++
++from __future__ import annotations
++
++import ast
++import importlib.util
++import os
++import re
++import shutil
++import subprocess
++import sys
++import xml.etree.ElementTree as ET
++from pathlib import Path
++from typing import Any
++
++import pytest
++
++ROOT = Path(__file__).resolve().parents[2]
++SRC = ROOT / "src" / "orca"
++TOOLS = ROOT / "tools"
++EDUKA = ROOT / "eduka"
++SETTINGS_PKG = EDUKA / "settings" / "eduka_orca_settings"
++EDUKA_SCHEMA_XML = EDUKA / "org.edukasaun.EdukaOrca.gschema.xml"
++LANGUAGES = ("pt", "id", "tet")
++
++gi = pytest.importorskip("gi")
++sys.path.insert(0, str(EDUKA / "settings"))
++
++from eduka_orca_settings import backend, i18n
++
++
++@pytest.fixture(scope="module", name="orca_schema")
++def fixture_orca_schema(tmp_path_factory: pytest.TempPathFactory) -> Path:
++    """Generates Orca's GSettings schema from the (patched) sources."""
++
++    output = tmp_path_factory.mktemp("schema") / "org.gnome.Orca.gschema.xml"
++    generator = TOOLS / "generate_gsettings_schemas.py"
++    subprocess.run([sys.executable, str(generator), str(SRC.parent), str(output)], check=True)
++    return output
++
++
++def _schema_keys(*paths: Path) -> dict[tuple[str, str], tuple[str, str]]:
++    """Returns {(schema id, key): (type, default)}; enum keys have type "s"."""
++
++    keys = {}
++    for path in paths:
++        for schema in ET.parse(path).getroot().iter("schema"):
++            for key in schema.iter("key"):
++                gtype = "s" if key.get("enum") else key.get("type", "")
++                default = (key.findtext("default") or "").strip()
++                keys[(schema.get("id", ""), key.get("name", ""))] = (gtype, default)
++    return keys
++
++
++@pytest.mark.unit
++def test_every_setting_exists_with_the_right_type(orca_schema: Path):
++    """Each setting in the window must map to a real key of the right type."""
++
++    keys = _schema_keys(orca_schema, EDUKA_SCHEMA_XML)
++    for setting in backend.SETTINGS.values():
++        if setting.schema == backend.A11Y_SCHEMA:
++            continue  # From gsettings-desktop-schemas.
++        assert (setting.schema, setting.key) in keys, setting.name
++        assert keys[(setting.schema, setting.key)][0] == setting.gtype, setting.name
++
++
++@pytest.mark.unit
++def test_window_defaults_match_schema_defaults(orca_schema: Path):
++    """The fallback defaults in backend.py must be the schema defaults."""
++
++    keys = _schema_keys(orca_schema, EDUKA_SCHEMA_XML)
++    for setting in backend.SETTINGS.values():
++        if setting.schema == backend.A11Y_SCHEMA:
++            continue
++        default = keys[(setting.schema, setting.key)][1]
++        value: Any = ast.literal_eval(default.replace("true", "True").replace("false", "False"))
++        assert value == setting.default, setting.name
++
++
++@pytest.mark.unit
++def test_english_is_the_default_language():
++    """English is the default language of the window and of the screen reader."""
++
++    keys = _schema_keys(EDUKA_SCHEMA_XML)
++    assert keys[("org.edukasaun.EdukaOrca", "language")][1] == "'en'"
++    assert i18n.DEFAULT_LANGUAGE == "en"
++    assert [code for code, _name in i18n.LANGUAGES] == ["en", "pt", "id", "tet"]
++
++
++def _snake(name: str) -> str:
++    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
++
++
++@pytest.mark.unit
++def test_dbus_setters_exist_in_orca():
++    """Live changes are sent to Orca setters; make sure each one exists."""
++
++    files = {
++        "SpeechManager": "speech_manager.py",
++        "SpeechPresenter": "speech_presenter.py",
++        "TypingEchoPresenter": "typing_echo_presenter.py",
++        "CommandManager": "command_manager.py",
++        "SoundPresenter": "sound_presenter.py",
++        "BraillePresenter": "braille_presenter.py",
++    }
++    for setting in backend.SETTINGS.values():
++        if not setting.dbus_module:
++            continue
++        text = (SRC / files[setting.dbus_module]).read_text()
++        setter = f"def set_{_snake(setting.dbus_setter or '')}("
++        assert setter in text, (setting.name, setter)
++
++
++@pytest.mark.unit
++def test_restart_only_settings_have_no_live_setter():
++    """Settings that need a restart are not sent to the running Orca."""
++
++    for name in backend.RESTART_REQUIRED:
++        assert name in backend.SETTINGS
++        if name != "language":
++            assert backend.SETTINGS[name].dbus_setter is None, name
++
++
++@pytest.mark.unit
++def test_store_round_trip(orca_schema: Path, tmp_path: Path):
++    """Values written by the window are read back from GSettings, and reset works."""
++
++    if shutil.which("glib-compile-schemas") is None:
++        pytest.skip("glib-compile-schemas is not installed")
++    shutil.copy(orca_schema, tmp_path)
++    shutil.copy(EDUKA_SCHEMA_XML, tmp_path)
++    subprocess.run(["glib-compile-schemas", "--strict", str(tmp_path)], check=True)
++
++    code = f"""
++import sys
++sys.path.insert(0, {str(EDUKA / "settings")!r})
++from eduka_orca_settings import backend
++store = backend.SettingsStore()
++assert not store.missing_schemas - {{backend.A11Y_SCHEMA}}, store.missing_schemas
++assert store.get("rate") == 30 and store.get("language") == "en"
++store.set("rate", 41.6)
++store.set("language", "tet")
++store.set("punctuation-level", "some")
++store.set("captions-font-size", 32.0)
++assert store.get("rate") == 42, store.get("rate")
++assert store.get("language") == "tet"
++assert store.get("punctuation-level") == "some"
++assert store.get("captions-font-size") == 32
++store.reset("rate")
++assert store.get("rate") == 30
++"""
++    env = dict(os.environ, GSETTINGS_SCHEMA_DIR=str(tmp_path), GSETTINGS_BACKEND="memory")
++    subprocess.run([sys.executable, "-c", code], check=True, env=env)
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize(
++    ("rate", "expected"), [(0, -100), (30, -40), (50, 0), (100, 100), (120, 100)]
++)
++def test_rate_conversion_matches_orca(rate: int, expected: int):
++    """The voice test must use the same rate as Orca's speech-dispatcher backend."""
++
++    assert backend.rate_to_speech_dispatcher(rate) == expected
++
++
++def _translatable_strings() -> set[str]:
++    strings = set()
++    tree = ast.parse((SETTINGS_PKG / "app.py").read_text())
++    for node in ast.walk(tree):
++        if (
++            isinstance(node, ast.Call)
++            and isinstance(node.func, ast.Name)
++            and node.func.id in ("_", "N_")
++            and node.args
++            and isinstance(node.args[0], ast.Constant)
++            and isinstance(node.args[0].value, str)
++        ):
++            strings.add(node.args[0].value)
++    return strings
++
++
++def _po_entries(language: str) -> dict[str, str]:
++    text = (EDUKA / "po" / f"{language}.po").read_text(encoding="utf-8")
++    entries = {}
++    for msgid, msgstr in re.findall(r'^msgid "(.*)"\nmsgstr "(.*)"$', text, re.MULTILINE):
++        entries[msgid.replace('\\"', '"')] = msgstr.replace('\\"', '"')
++    return entries
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize("language", LANGUAGES)
++def test_every_string_is_translated(language: str):
++    """Portuguese, Indonesian and Tetum must translate every string of the window."""
++
++    entries = _po_entries(language)
++    for string in _translatable_strings():
++        assert entries.get(string), f"{language}: missing translation for {string!r}"
++
++
++@pytest.mark.unit
++def test_po_languages_are_listed():
++    """Every .po file is compiled (listed in LINGUAS) and vice versa."""
++
++    linguas = (EDUKA / "po" / "LINGUAS").read_text().split()
++    assert sorted(linguas) == sorted(LANGUAGES)
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize("language", LANGUAGES)
++def test_po_files_compile(language: str, tmp_path: Path):
++    """The .po files are valid (format strings, headers, encoding)."""
++
++    if shutil.which("msgfmt") is None:
++        pytest.skip("msgfmt is not installed")
++    subprocess.run(
++        ["msgfmt", "--check", "-o", str(tmp_path / "x.mo"), str(EDUKA / "po" / f"{language}.po")],
++        check=True,
++    )
++
++
++@pytest.mark.unit
++def test_tetum_falls_back_to_portuguese(tmp_path: Path):
++    """Strings missing from Tetum are shown in Portuguese, not English."""
++
++    if shutil.which("msgfmt") is None:
++        pytest.skip("msgfmt is not installed")
++    for language, msgstr in (("pt", "Fala"), ("tet", "")):
++        directory = tmp_path / language / "LC_MESSAGES"
++        directory.mkdir(parents=True)
++        po = tmp_path / f"{language}.po"
++        po.write_text(
++            'msgid ""\nmsgstr "Content-Type: text/plain; charset=UTF-8\\n"\n\n'
++            f'msgid "Speech"\nmsgstr "{msgstr}"\n',
++            encoding="utf-8",
++        )
++        subprocess.run(["msgfmt", "-o", str(directory / "eduka-orca.mo"), str(po)], check=True)
++    i18n.set_localedir(str(tmp_path))
++    try:
++        assert i18n.set_language("tet") == "tet"
++        assert i18n._("Speech") == "Fala"
++        assert i18n.set_language("en") == "en"
++        assert i18n._("Speech") == "Speech"
++        assert i18n.set_language("unknown") == "en"
++    finally:
++        i18n.set_localedir(None)
++        i18n.set_language("en")
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize(
++    ("environment", "expected"),
++    [
++        ({"LANGUAGE": "tet:pt", "LANG": "en_US.UTF-8"}, "tet"),
++        ({"LANGUAGE": "", "LANG": "id_ID.UTF-8"}, "id"),
++        ({"LANGUAGE": "", "LANG": "pt_BR.UTF-8"}, "pt"),
++        ({"LANGUAGE": "", "LANG": "fr_FR.UTF-8"}, "en"),
++    ],
++)
++def test_system_language(monkeypatch: pytest.MonkeyPatch, environment: dict, expected: str):
++    """ "Same as the desktop" picks the matching supported language, or English."""
++
++    for variable in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
++        monkeypatch.delenv(variable, raising=False)
++    for variable, value in environment.items():
++        monkeypatch.setenv(variable, value)
++    monkeypatch.setattr(i18n.locale, "getlocale", lambda *_args: (None, None))
++    assert i18n.resolve("system") == expected
++
++
++def _load_eduka_defaults() -> Any:
++    spec = importlib.util.spec_from_file_location("eduka_defaults", SRC / "eduka_defaults.py")
++    assert spec is not None and spec.loader is not None
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize(
++    ("value", "expected"),
++    [("en", ("en", "US")), ("id", ("id", "ID")), ("tet", ("tet", "TL")), ("", None), ("xx", None)],
++)
++def test_orca_language_override(monkeypatch: pytest.MonkeyPatch, value: str, expected: Any):
++    """Orca picks the voice language from EDUKA_ORCA_LANGUAGE (set by eduka-orca)."""
++
++    defaults = _load_eduka_defaults()
++    monkeypatch.setenv(defaults.LANGUAGE_ENVIRONMENT_VARIABLE, value)
++    assert defaults.get_language_override() == expected
++    assert tuple(code for code, _name in i18n.LANGUAGES) == defaults.SUPPORTED_LANGUAGES
++    if expected:
++        language, dialect = defaults.map_speech_language(*expected)
++        assert (language, dialect) != ("tet", "TL")  # Tetum is spoken with Portuguese.
++
++
++@pytest.mark.unit
++@pytest.mark.parametrize("script", ["eduka-orca", "eduka-orca-toggle", "eduka-orca-autostart"])
++def test_shell_scripts_are_valid(script: str):
++    """The helper scripts must be valid POSIX shell (they run under dash)."""
++
++    path = EDUKA / "bin" / script
++    assert os.access(path, os.X_OK), script
++    subprocess.run(["sh", "-n", str(path)], check=True)
++
++
++@pytest.mark.unit
++def test_toggle_options():
++    """eduka-orca-toggle understands --status and --help, and rejects unknown options."""
++
++    toggle = str(EDUKA / "bin" / "eduka-orca-toggle")
++    status = subprocess.run(["sh", toggle, "--status"], capture_output=True, text=True, check=True)
++    assert status.stdout.strip() in ("on", "off")
++    subprocess.run(["sh", toggle, "--help"], capture_output=True, check=True)
++    bad = subprocess.run(["sh", toggle, "--bogus"], capture_output=True, check=False)
++    assert bad.returncode == 2
+-- 
+2.43.0
+
